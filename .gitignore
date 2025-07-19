@@ -1,0 +1,5 @@
+# folders to ignore
+.venv_happyrobot/
+
+# files to ignore
+*.env
