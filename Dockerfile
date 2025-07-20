@@ -4,10 +4,12 @@ FROM python:3.11-slim as builder
 # Set build arguments
 ARG BUILD_ENV=production
 
-# Install system dependencies for building
+# Install system dependencies for building (including MySQL client)
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
+    default-libmysqlclient-dev \
+    pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 # Create virtual environment
@@ -25,9 +27,10 @@ FROM python:3.11-slim as production
 # Create non-root user for security
 RUN groupadd -r appuser && useradd -r -g appuser appuser
 
-# Install only runtime dependencies
+# Install only runtime dependencies (including MySQL client libs)
 RUN apt-get update && apt-get install -y \
     curl \
+    default-libmysqlclient-dev \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
@@ -40,7 +43,9 @@ WORKDIR /app
 
 # Copy application code
 COPY backend/ /app/
-COPY .env /app/.env
+
+# Copy .env file if it exists (optional)
+COPY .env* /app/
 
 # Create necessary directories with proper permissions
 RUN mkdir -p /app/data /app/logs && \
@@ -61,5 +66,5 @@ ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 ENV ENVIRONMENT=production
 
-# Run the application with proper signal handling
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--access-log", "--log-level", "info"]
+# Run the application - use main.py since it has proper uvicorn configuration
+CMD ["python", "main.py"]

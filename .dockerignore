@@ -1,0 +1,9 @@
+# flyctl launch added from .gitignore
+# folders to ignore
+**/.venv_carrier_sales
+**/backend/__pycache__
+
+
+# files to ignore
+**/*.env
+fly.toml
