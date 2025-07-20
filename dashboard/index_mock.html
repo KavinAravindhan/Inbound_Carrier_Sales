@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inbound Carrier Sales Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/date-fns/2.29.3/index.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary-color: #2563eb;
+            --secondary-color: #1e40af;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --dark-color: #1f2937;
+            --light-color: #f8fafc;
+            --border-color: #e5e7eb;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: var(--dark-color);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: var(--shadow-lg);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 3rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #6b7280;
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+        }
+
+        .status-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            border-radius: 20px;
+            font-size: 0.9rem;
+            color: var(--success-color);
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--success-color);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+            margin-bottom: 40px;
+        }
+
+        .metric-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: var(--shadow-lg);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .metric-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+        }
+
+        .metric-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
+        }
+
+        .metric-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .metric-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            color: white;
+        }
+
+        .metric-icon.calls { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
+        .metric-icon.recent { background: linear-gradient(135deg, #10b981, #059669); }
+        .metric-icon.conversion { background: linear-gradient(135deg, #f59e0b, #d97706); }
+        .metric-icon.rate { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
+
+        .metric-value {
+            font-size: 2.8rem;
+            font-weight: 800;
+            color: var(--dark-color);
+            margin-bottom: 8px;
+            line-height: 1;
+        }
+
+        .metric-label {
+            color: #6b7280;
+            font-size: 1rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .metric-trend {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 12px;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        .trend-up { color: var(--success-color); }
+        .trend-down { color: var(--danger-color); }
+
+        .charts-section {
+            margin-bottom: 40px;
+        }
+
+        .section-title {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: white;
+            margin-bottom: 24px;
+            text-align: center;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .chart-container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: var(--shadow-lg);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            position: relative;
+        }
+
+        .chart-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }
+
+        .chart-title {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--dark-color);
+        }
+
+        .chart-subtitle {
+            font-size: 0.9rem;
+            color: #6b7280;
+            margin-top: 4px;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            height: 300px;
+        }
+
+        .data-table {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: var(--shadow-lg);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            overflow: hidden;
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+            margin-top: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            background: rgba(59, 130, 246, 0.1);
+            font-weight: 600;
+            color: var(--dark-color);
+        }
+
+        .controls {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            margin: 40px 0;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            color: white;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            box-shadow: var(--shadow);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(37, 99, 235, 0.3);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.9);
+            color: var(--dark-color);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background: white;
+            transform: translateY(-2px);
+        }
+
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 40px;
+            font-size: 1.1rem;
+            color: #6b7280;
+        }
+
+        .spinner {
+            width: 24px;
+            height: 24px;
+            border: 3px solid #e5e7eb;
+            border-top: 3px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error {
+            background: linear-gradient(135deg, #fecaca, #fca5a5);
+            color: var(--danger-color);
+            padding: 20px;
+            border-radius: 12px;
+            margin: 20px 0;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 16px 20px;
+            border-radius: 12px;
+            box-shadow: var(--shadow-lg);
+            border-left: 4px solid var(--success-color);
+            z-index: 1000;
+            transform: translateX(400px);
+            transition: transform 0.3s ease;
+        }
+
+        .toast.show {
+            transform: translateX(0);
+        }
+
+        .footer {
+            text-align: center;
+            padding: 40px 20px;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 768px) {
+            .container { padding: 16px; }
+            .header h1 { font-size: 2.2rem; }
+            .metrics-grid { grid-template-columns: 1fr; }
+            .charts-grid { grid-template-columns: 1fr; }
+            .metric-card, .chart-container { padding: 20px; }
+            .controls { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1><i class="fas fa-truck"></i> Inbound Carrier Sales Dashboard</h1>
+            <p>Real-time analytics for AI-powered carrier engagement</p>
+            <div class="status-bar">
+                <div class="status-item">
+                    <div class="status-indicator"></div>
+                    <span>API Active</span>
+                </div>
+                <div class="status-item" id="fmcsa-status">
+                    <div class="status-indicator"></div>
+                    <span>FMCSA Connected</span>
+                </div>
+                <div class="status-item">
+                    <div class="status-indicator"></div>
+                    <span>Real-time Updates</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="error-container"></div>
+        
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-header">
+                    <div>
+                        <div class="metric-value" id="total-calls">-</div>
+                        <div class="metric-label">Total Calls</div>
+                    </div>
+                    <div class="metric-icon calls">
+                        <i class="fas fa-phone"></i>
+                    </div>
+                </div>
+                <div class="metric-trend trend-up" id="calls-trend">
+                    <i class="fas fa-arrow-up"></i>
+                    <span>+12% this week</span>
+                </div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-header">
+                    <div>
+                        <div class="metric-value" id="recent-calls">-</div>
+                        <div class="metric-label">Recent Calls (7 days)</div>
+                    </div>
+                    <div class="metric-icon recent">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                </div>
+                <div class="metric-trend trend-up" id="recent-trend">
+                    <i class="fas fa-arrow-up"></i>
+                    <span>+8% vs last week</span>
+                </div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-header">
+                    <div>
+                        <div class="metric-value" id="conversion-rate">-</div>
+                        <div class="metric-label">Conversion Rate</div>
+                    </div>
+                    <div class="metric-icon conversion">
+                        <i class="fas fa-chart-line"></i>
+                    </div>
+                </div>
+                <div class="metric-trend" id="conversion-trend">
+                    <i class="fas fa-arrow-up"></i>
+                    <span>Industry avg: 15%</span>
+                </div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-header">
+                    <div>
+                        <div class="metric-value" id="avg-rate">-</div>
+                        <div class="metric-label">Avg Negotiated Rate</div>
+                    </div>
+                    <div class="metric-icon rate">
+                        <i class="fas fa-dollar-sign"></i>
+                    </div>
+                </div>
+                <div class="metric-trend trend-up" id="rate-trend">
+                    <i class="fas fa-arrow-up"></i>
+                    <span>+3% vs last month</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="charts-section">
+            <h2 class="section-title">Performance Analytics</h2>
+            
+            <div class="charts-grid">
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <div>
+                            <div class="chart-title">Call Classifications</div>
+                            <div class="chart-subtitle">Breakdown of call outcomes</div>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="classificationsChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <div>
+                            <div class="chart-title">Carrier Sentiment</div>
+                            <div class="chart-subtitle">Sentiment analysis results</div>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="sentimentChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-header">
+                    <div>
+                        <div class="chart-title">Equipment Performance</div>
+                        <div class="chart-subtitle">Call volume by equipment type</div>
+                    </div>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="equipmentChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button class="btn btn-primary" onclick="loadDashboard()">
+                <i class="fas fa-sync-alt"></i>
+                Refresh Data
+            </button>
+            <button class="btn btn-secondary" onclick="exportData()">
+                <i class="fas fa-download"></i>
+                Export Report
+            </button>
+            <a href="https://carrier-sales-kavin.fly.dev/docs" class="btn btn-secondary" target="_blank">
+                <i class="fas fa-code"></i>
+                API Documentation
+            </a>
+        </div>
+
+        <div class="footer">
+            <p>© 2025 Inbound Carrier Sales AI Dashboard | Last Updated: <span id="last-update">-</span></p>
+        </div>
+    </div>
+
+    <script>
+        // Configuration - UPDATED API URL
+        const API_BASE_URL = window.location.hostname === 'localhost' 
+            ? 'http://localhost:8000' 
+            : 'https://carrier-sales-kavin.fly.dev';
+        const API_KEY = 'secure-api-key-change-this-in-production';
+        const REFRESH_INTERVAL = 30000; // 30 seconds
+
+        // Chart instances
+        let classificationsChart = null;
+        let sentimentChart = null;
+        let equipmentChart = null;
+
+        // Utility functions
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = `
+                <i class="fas fa-${type === 'success' ? 'check' : 'exclamation'}-circle"></i>
+                <span>${message}</span>
+            `;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => toast.classList.add('show'), 100);
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => document.body.removeChild(toast), 300);
+            }, 3000);
+        }
+
+        async function fetchWithAuth(url) {
+            try {
+                const response = await fetch(url, {
+                    headers: {
+                        'Authorization': `Bearer ${API_KEY}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                return await response.json();
+            } catch (error) {
+                console.error('API Error:', error);
+                throw error;
+            }
+        }
+
+        function showError(message) {
+            const errorContainer = document.getElementById('error-container');
+            errorContainer.innerHTML = `
+                <div class="error">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <div>
+                        <strong>Error:</strong> ${message}
+                        <br><small>Check console for details or try refreshing the page.</small>
+                    </div>
+                </div>
+            `;
+        }
+
+        function hideError() {
+            const errorContainer = document.getElementById('error-container');
+            errorContainer.innerHTML = '';
+        }
+
+        function updateLoadingState(isLoading) {
+            const elements = ['total-calls', 'recent-calls', 'conversion-rate', 'avg-rate'];
+            elements.forEach(id => {
+                const element = document.getElementById(id);
+                element.textContent = isLoading ? '...' : element.textContent;
+            });
+        }
+
+        function createChart(ctx, config) {
+            return new Chart(ctx, {
+                ...config,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 20,
+                                usePointStyle: true,
+                                font: { size: 12, weight: '500' }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                            titleColor: '#1f2937',
+                            bodyColor: '#6b7280',
+                            borderColor: '#e5e7eb',
+                            borderWidth: 1,
+                            cornerRadius: 8,
+                            displayColors: true
+                        }
+                    },
+                    ...config.options
+                }
+            });
+        }
+
+        async function checkAPIHealth() {
+            try {
+                const health = await fetchWithAuth(`${API_BASE_URL}/health`);
+                const fmcsaStatus = document.getElementById('fmcsa-status');
+                
+                if (health.fmcsa_api === 'configured') {
+                    fmcsaStatus.innerHTML = `
+                        <div class="status-indicator"></div>
+                        <span>FMCSA Connected</span>
+                    `;
+                } else {
+                    fmcsaStatus.innerHTML = `
+                        <div class="status-indicator" style="background: var(--warning-color)"></div>
+                        <span>FMCSA Mock Mode</span>
+                    `;
+                }
+                
+                return true;
+            } catch (error) {
+                console.error('Health check failed:', error);
+                return false;
+            }
+        }
+
+        async function loadDashboard() {
+            try {
+                hideError();
+                updateLoadingState(true);
+
+                // Check API health first
+                const isHealthy = await checkAPIHealth();
+                if (!isHealthy) {
+                    throw new Error('API health check failed');
+                }
+
+                // FIXED: Proper API call and data extraction
+                const data = await fetchWithAuth(`${API_BASE_URL}/dashboard-metrics`);
+                const metrics = data.metrics;
+
+                // Update metric cards
+                document.getElementById('total-calls').textContent = metrics.summary.total_calls;
+                document.getElementById('recent-calls').textContent = metrics.summary.recent_calls;
+                document.getElementById('conversion-rate').textContent = `${metrics.summary.conversion_rate}%`;
+                document.getElementById('avg-rate').textContent = `$${metrics.summary.average_negotiated_rate.toLocaleString()}`;
+
+                // Update last refresh time
+                document.getElementById('last-update').textContent = new Date().toLocaleString();
+
+                // Update classifications chart
+                updateClassificationsChart(metrics.classifications);
+                
+                // Update sentiment chart
+                updateSentimentChart(metrics.sentiments);
+                
+                // Update equipment chart
+                updateEquipmentChart(metrics.equipment_performance);
+
+                showToast('Dashboard updated successfully!');
+
+            } catch (error) {
+                console.error('Error loading dashboard:', error);
+                showError(`Failed to load dashboard: ${error.message}`);
+                showToast('Failed to update dashboard', 'error');
+            } finally {
+                updateLoadingState(false);
+            }
+        }
+
+        function updateClassificationsChart(data) {
+            if (typeof Chart === 'undefined') {
+                console.warn('Chart.js not available, skipping classifications chart');
+                return;
+            }
+            
+            const ctx = document.getElementById('classificationsChart').getContext('2d');
+            
+            if (classificationsChart) {
+                classificationsChart.destroy();
+            }
+
+            const colors = [
+                '#10b981', // green for booked
+                '#f59e0b', // yellow for negotiation
+                '#ef4444', // red for not interested
+                '#3b82f6', // blue for inquiry
+                '#8b5cf6'  // purple for other
+            ];
+
+            classificationsChart = createChart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: data.map(item => item.type.replace('_', ' ').toUpperCase()),
+                    datasets: [{
+                        data: data.map(item => item.count),
+                        backgroundColor: colors,
+                        borderWidth: 2,
+                        borderColor: '#ffffff'
+                    }]
+                },
+                options: {
+                    cutout: '60%',
+                    plugins: {
+                        legend: {
+                            position: 'right'
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateSentimentChart(data) {
+            if (typeof Chart === 'undefined') {
+                console.warn('Chart.js not available, skipping sentiment chart');
+                return;
+            }
+            
+            const ctx = document.getElementById('sentimentChart').getContext('2d');
+            
+            if (sentimentChart) {
+                sentimentChart.destroy();
+            }
+
+            const colors = {
+                'positive': '#10b981',
+                'neutral': '#f59e0b', 
+                'negative': '#ef4444'
+            };
+
+            sentimentChart = createChart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.map(item => item.type.toUpperCase()),
+                    datasets: [{
+                        label: 'Call Count',
+                        data: data.map(item => item.count),
+                        backgroundColor: data.map(item => colors[item.type] || '#6b7280'),
+                        borderRadius: 8,
+                        borderSkipped: false
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { stepSize: 1 },
+                            grid: { color: '#f3f4f6' }
+                        },
+                        x: {
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateEquipmentChart(data) {
+            if (typeof Chart === 'undefined') {
+                console.warn('Chart.js not available, skipping equipment chart');
+                return;
+            }
+            
+            const ctx = document.getElementById('equipmentChart').getContext('2d');
+            
+            if (equipmentChart) {
+                equipmentChart.destroy();
+            }
+
+            equipmentChart = createChart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.map(item => item.type),
+                    datasets: [{
+                        label: 'Calls Received',
+                        data: data.map(item => item.calls),
+                        backgroundColor: 'rgba(59, 130, 246, 0.8)',
+                        borderColor: 'rgba(59, 130, 246, 1)',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            grid: { color: '#f3f4f6' }
+                        },
+                        y: {
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        function exportData() {
+            showToast('Export feature coming soon!', 'info');
+        }
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check if Chart.js loaded properly
+            if (typeof Chart === 'undefined') {
+                console.error('Chart.js failed to load, trying alternative CDN...');
+                const script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+                script.onload = function() {
+                    console.log('Chart.js loaded successfully');
+                    loadDashboard();
+                };
+                script.onerror = function() {
+                    console.error('Failed to load Chart.js from alternative CDN');
+                    showError('Charts library failed to load. Dashboard metrics will work, but charts will not display.');
+                };
+                document.head.appendChild(script);
+                return;
+            }
+            
+            loadDashboard();
+            
+            // Auto-refresh every 30 seconds
+            setInterval(loadDashboard, REFRESH_INTERVAL);
+            
+            // Add keyboard shortcuts
+            document.addEventListener('keydown', function(e) {
+                if (e.ctrlKey && e.key === 'r') {
+                    e.preventDefault();
+                    loadDashboard();
+                }
+            });
+        });
+
+        // Handle window focus for real-time updates
+        window.addEventListener('focus', loadDashboard);
+    </script>
+</body>
+</html>
