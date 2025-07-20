@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Inbound Carrier Sales Dashboard</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/date-fns/2.29.3/index.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -526,7 +526,7 @@
                 <i class="fas fa-download"></i>
                 Export Report
             </button>
-            <a href="/docs" class="btn btn-secondary" target="_blank">
+            <a href="https://carrier-sales-kavin.fly.dev/docs" class="btn btn-secondary" target="_blank">
                 <i class="fas fa-code"></i>
                 API Documentation
             </a>
@@ -538,10 +538,10 @@
     </div>
 
     <script>
-        // Configuration
+        // Configuration - UPDATED API URL
         const API_BASE_URL = window.location.hostname === 'localhost' 
             ? 'http://localhost:8000' 
-            : 'https://your-deployed-api.railway.app';
+            : 'https://carrier-sales-kavin.fly.dev';
         const API_KEY = 'secure-api-key-change-this-in-production';
         const REFRESH_INTERVAL = 30000; // 30 seconds
 
@@ -678,7 +678,9 @@
                     throw new Error('API health check failed');
                 }
 
-                const metrics = await fetchWithAuth(`${API_BASE_URL}/dashboard-metrics`);
+                // FIXED: Proper API call and data extraction
+                const data = await fetchWithAuth(`${API_BASE_URL}/dashboard-metrics`);
+                const metrics = data.metrics;
 
                 // Update metric cards
                 document.getElementById('total-calls').textContent = metrics.summary.total_calls;
@@ -710,6 +712,11 @@
         }
 
         function updateClassificationsChart(data) {
+            if (typeof Chart === 'undefined') {
+                console.warn('Chart.js not available, skipping classifications chart');
+                return;
+            }
+            
             const ctx = document.getElementById('classificationsChart').getContext('2d');
             
             if (classificationsChart) {
@@ -747,6 +754,11 @@
         }
 
         function updateSentimentChart(data) {
+            if (typeof Chart === 'undefined') {
+                console.warn('Chart.js not available, skipping sentiment chart');
+                return;
+            }
+            
             const ctx = document.getElementById('sentimentChart').getContext('2d');
             
             if (sentimentChart) {
@@ -787,6 +799,11 @@
         }
 
         function updateEquipmentChart(data) {
+            if (typeof Chart === 'undefined') {
+                console.warn('Chart.js not available, skipping equipment chart');
+                return;
+            }
+            
             const ctx = document.getElementById('equipmentChart').getContext('2d');
             
             if (equipmentChart) {
@@ -794,7 +811,7 @@
             }
 
             equipmentChart = createChart(ctx, {
-                type: 'horizontalBar',
+                type: 'bar',
                 data: {
                     labels: data.map(item => item.type),
                     datasets: [{
@@ -827,6 +844,23 @@
 
         // Initialize dashboard
         document.addEventListener('DOMContentLoaded', function() {
+            // Check if Chart.js loaded properly
+            if (typeof Chart === 'undefined') {
+                console.error('Chart.js failed to load, trying alternative CDN...');
+                const script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+                script.onload = function() {
+                    console.log('Chart.js loaded successfully');
+                    loadDashboard();
+                };
+                script.onerror = function() {
+                    console.error('Failed to load Chart.js from alternative CDN');
+                    showError('Charts library failed to load. Dashboard metrics will work, but charts will not display.');
+                };
+                document.head.appendChild(script);
+                return;
+            }
+            
             loadDashboard();
             
             // Auto-refresh every 30 seconds

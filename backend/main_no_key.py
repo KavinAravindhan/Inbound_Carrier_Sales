@@ -1,12 +1,12 @@
 """
 Carrier Sales API - Backend Server
-Production-ready version with real FMCSA API integration and graceful fallback
+Production-ready version with graceful database handling
+Updated for HappyRobot integration compatibility
 """
 
 import os
 import logging
 import mysql.connector
-import httpx
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List
 from contextlib import asynccontextmanager
@@ -56,9 +56,7 @@ if API_KEY == "secure-api-key-change-this-in-production":
     logger.warning("⚠️  Using default API key! Change this in production!")
 
 if not FMCSA_API_KEY:
-    logger.warning("⚠️  No FMCSA API key provided! Using professional mock data only.")
-else:
-    logger.info(f"✅ FMCSA API key configured: {FMCSA_API_KEY[:10]}...")
+    logger.warning("⚠️  No FMCSA API key provided! Using professional mock data.")
 
 # Database connection functions
 def get_db_connection():
@@ -192,19 +190,15 @@ MOCK_CARRIER_DATA = {
         "address": "123 Trucking Way, Transport City, TX 75001",
         "phone": "(555) 123-4567",
         "email": "dispatch@abctransport.com",
-        "dot_number": "1234567",
         "equipment_types": ["Dry Van", "Refrigerated"],
         "fleet_size": 25,
-        "drivers": 30,
         "safety_rating": "Satisfactory",
         "insurance_status": "Active",
         "authority_status": "Active",
         "years_in_business": 8,
         "preferred_lanes": ["TX-CA", "TX-FL", "IL-TX"],
         "average_rate_per_mile": 2.85,
-        "last_used": "2025-07-15",
-        "out_of_service": "",
-        "data_source": "professional_mock"
+        "last_used": "2025-07-15"
     },
     "789012": {
         "mc_number": "789012",
@@ -212,19 +206,15 @@ MOCK_CARRIER_DATA = {
         "address": "456 Highway Blvd, Logistics Park, CA 90210",
         "phone": "(555) 987-6543",
         "email": "ops@expressfreight.com",
-        "dot_number": "7890123",
         "equipment_types": ["Flatbed", "Step Deck"],
         "fleet_size": 40,
-        "drivers": 45,
         "safety_rating": "Satisfactory",
         "insurance_status": "Active",
         "authority_status": "Active",
         "years_in_business": 12,
         "preferred_lanes": ["CA-TX", "CA-AZ", "NV-CA"],
         "average_rate_per_mile": 3.20,
-        "last_used": "2025-07-18",
-        "out_of_service": "",
-        "data_source": "professional_mock"
+        "last_used": "2025-07-18"
     }
 }
 
@@ -352,74 +342,6 @@ MOCK_LOAD_DATA = [
     }
 ]
 
-# FMCSA API Integration
-async def query_fmcsa_api(mc_number: str, api_key: str):
-    """Query the real FMCSA API for carrier information"""
-    if not api_key:
-        logger.warning("No FMCSA API key available")
-        return None
-    
-    try:
-        # FMCSA QCMobile API endpoint for MC number lookup
-        url = f"https://mobile.fmcsa.dot.gov/qc/services/carriers/docket-number/{mc_number}"
-        params = {"webKey": api_key}
-        
-        logger.info(f"Querying FMCSA API for MC {mc_number}")
-        
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(url, params=params)
-            
-            if response.status_code == 200:
-                try:
-                    data = response.json()
-                    logger.info(f"FMCSA API returned data for MC {mc_number}")
-                    
-                    # Handle both single object and array responses
-                    if isinstance(data, list) and len(data) > 0:
-                        data = data[0]  # Take first result
-                    
-                    if data and isinstance(data, dict):
-                        # Transform FMCSA data to our format
-                        carrier_data = {
-                            "mc_number": mc_number,
-                            "company_name": data.get("legalName", "Unknown"),
-                            "address": f"{data.get('phyStreet', '')} {data.get('phyCity', '')} {data.get('phyState', '')} {data.get('phyZipcode', '')}".strip(),
-                            "phone": data.get("telephone", ""),
-                            "email": data.get("emailAddress", ""),
-                            "dot_number": str(data.get("dotNumber", "")),
-                            "safety_rating": data.get("safetyRating", "Not Rated"),
-                            "authority_status": "Active" if data.get("allowToOperate") == "Y" else "Inactive",
-                            "insurance_status": "Active" if data.get("bippdInsuranceOnFile") == "Y" else "Unknown",
-                            "out_of_service": data.get("outOfServiceDate", ""),
-                            "fleet_size": int(data.get("totalPowerUnits", 0)),
-                            "drivers": int(data.get("totalDrivers", 0)),
-                            "data_source": "fmcsa_api",
-                            "last_updated": data.get("recordStatus", ""),
-                            "equipment_types": ["Various"],  # FMCSA doesn't provide detailed equipment types
-                            "years_in_business": "Unknown",
-                            "preferred_lanes": [],
-                            "average_rate_per_mile": 0.0
-                        }
-                        
-                        return carrier_data
-                        
-                except Exception as parse_error:
-                    logger.error(f"Error parsing FMCSA API response: {parse_error}")
-                    logger.error(f"Raw response: {response.text[:500]}")
-                    
-            else:
-                logger.warning(f"FMCSA API returned status {response.status_code} for MC {mc_number}")
-                logger.warning(f"Response: {response.text[:200]}")
-                    
-            return None
-            
-    except httpx.TimeoutException:
-        logger.warning(f"FMCSA API timeout for MC {mc_number}")
-        return None
-    except Exception as e:
-        logger.warning(f"FMCSA API query failed for MC {mc_number}: {e}")
-        return None
-
 # Pydantic Models with V2 validators
 class LoadSearchRequest(BaseModel):
     equipment_type: str
@@ -499,8 +421,8 @@ async def lifespan(app: FastAPI):
 # Initialize FastAPI app
 app = FastAPI(
     title="Carrier Sales API",
-    description="AI-powered freight broker assistant for carrier sales with real FMCSA integration",
-    version="1.1.0",
+    description="AI-powered freight broker assistant for carrier sales",
+    version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan
@@ -548,9 +470,8 @@ async def root():
     """Root endpoint with API information"""
     return {
         "message": "Carrier Sales API",
-        "version": "1.1.0",
+        "version": "1.0.0",
         "environment": ENVIRONMENT,
-        "fmcsa_api_available": bool(FMCSA_API_KEY),
         "documentation": "/docs",
         "health_check": "/health"
     }
@@ -579,8 +500,7 @@ async def health_check():
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "environment": ENVIRONMENT,
             "database": database_status,
-            "fmcsa_api_configured": bool(FMCSA_API_KEY),
-            "version": "1.1.0"
+            "version": "1.0.0"
         }
     except Exception as e:
         logger.error(f"Health check failed: {e}")
@@ -589,61 +509,27 @@ async def health_check():
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "environment": ENVIRONMENT,
             "database": "mock",
-            "fmcsa_api_configured": bool(FMCSA_API_KEY),
-            "version": "1.1.0"
+            "version": "1.0.0"
         }
 
 @app.post("/verify-carrier")
 async def verify_carrier(request: CarrierVerificationRequest, api_key: str = Depends(verify_api_key)):
-    """Enhanced carrier verification using real FMCSA API with fallback to mock data"""
+    """Verify carrier information using MC number"""
     try:
         mc_number = request.mc_number.strip()
         
-        # Try real FMCSA API first
-        if FMCSA_API_KEY:
-            logger.info(f"Attempting FMCSA API lookup for MC {mc_number}")
-            fmcsa_data = await query_fmcsa_api(mc_number, FMCSA_API_KEY)
-            
-            if fmcsa_data:
-                # Check if FMCSA returned meaningful data
-                company_name = fmcsa_data.get("company_name", "").strip()
-                authority_status = fmcsa_data.get("authority_status", "").strip()
-                
-                # Treat "Unknown" company or inactive authority as not found
-                if (company_name in ["Unknown", "", "N/A"] or 
-                    authority_status in ["Inactive", "", "N/A"] or
-                    (fmcsa_data.get("fleet_size", 0) == 0 and 
-                     fmcsa_data.get("drivers", 0) == 0 and 
-                     company_name == "Unknown")):
-                    
-                    logger.info(f"FMCSA returned inactive/unknown carrier for MC {mc_number}, treating as not found")
-                    # Continue to fallback logic below
-                    
-                else:
-                    # Valid FMCSA data found
-                    logger.info(f"Successfully retrieved valid data from FMCSA API for MC {mc_number}")
-                    fmcsa_data["verified_at"] = datetime.now(timezone.utc).isoformat()
-                    
-                    return {
-                        "success": True,
-                        "carrier": fmcsa_data,
-                        "verification_status": "verified",
-                        "data_source": "fmcsa_api"
-                    }
-            else:
-                logger.warning(f"FMCSA API returned no data for MC {mc_number}, falling back to mock data")
-        
-        # Fallback to professional mock data
-        logger.info(f"Using mock data for MC {mc_number}")
+        # Use professional mock data
         if mc_number in MOCK_CARRIER_DATA:
             carrier_data = MOCK_CARRIER_DATA[mc_number].copy()
+            
+            # Add verification timestamp
             carrier_data["verified_at"] = datetime.now(timezone.utc).isoformat()
+            carrier_data["data_source"] = "professional_mock"
             
             return {
                 "success": True,
                 "carrier": carrier_data,
-                "verification_status": "verified",
-                "data_source": "professional_mock"
+                "verification_status": "verified"
             }
         else:
             # Return structured "not found" response
@@ -652,8 +538,7 @@ async def verify_carrier(request: CarrierVerificationRequest, api_key: str = Dep
                 "carrier": None,
                 "verification_status": "not_found",
                 "message": f"No carrier found with MC number {mc_number}",
-                "suggested_action": "Please verify the MC number and try again",
-                "data_source": "not_found"
+                "suggested_action": "Please verify the MC number and try again"
             }
             
     except Exception as e:
@@ -1117,37 +1002,6 @@ async def get_dashboard_metrics():
     except Exception as e:
         logger.error(f"Dashboard metrics error: {e}")
         raise HTTPException(status_code=500, detail="Dashboard metrics failed")
-
-# FMCSA API Test Endpoint (for debugging)
-@app.get("/test-fmcsa/{mc_number}")
-async def test_fmcsa_api(mc_number: str, api_key: str = Depends(verify_api_key)):
-    """Test FMCSA API connectivity (for debugging)"""
-    if not FMCSA_API_KEY:
-        return {
-            "success": False,
-            "error": "No FMCSA API key configured",
-            "mc_number": mc_number
-        }
-    
-    try:
-        result = await query_fmcsa_api(mc_number, FMCSA_API_KEY)
-        
-        return {
-            "success": bool(result),
-            "mc_number": mc_number,
-            "fmcsa_data": result,
-            "api_key_partial": f"{FMCSA_API_KEY[:10]}...",
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"FMCSA API test error: {e}")
-        return {
-            "success": False,
-            "error": str(e),
-            "mc_number": mc_number,
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
 
 if __name__ == "__main__":
     # Run the application with proper configuration
