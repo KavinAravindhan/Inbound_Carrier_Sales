@@ -54,16 +54,24 @@ DEBUG = os.getenv("DEBUG", "true").lower() == "true"
 # Global variable to track database availability
 DATABASE_AVAILABLE = False
 
-# MySQL Configuration
+# # MySQL Configuration
+# MYSQL_CONFIG = {
+#     'host': os.getenv("MYSQL_HOST", "localhost"),
+#     'port': int(os.getenv("MYSQL_PORT", "3306")),
+#     'user': os.getenv("MYSQL_USER", "root"),
+#     'password': os.getenv("MYSQL_PASSWORD", "kavin2002"),
+#     'database': os.getenv("MYSQL_DATABASE", "carrier_sales"),
+#     'charset': 'utf8mb4',
+#     'use_unicode': True,
+#     'autocommit': True
+# }
+
 MYSQL_CONFIG = {
-    'host': os.getenv("MYSQL_HOST", "localhost"),
-    'port': int(os.getenv("MYSQL_PORT", "3306")),
-    'user': os.getenv("MYSQL_USER", "root"),
-    'password': os.getenv("MYSQL_PASSWORD", "kavin2002"),
-    'database': os.getenv("MYSQL_DATABASE", "carrier_sales"),
-    'charset': 'utf8mb4',
-    'use_unicode': True,
-    'autocommit': True
+    "host":      os.getenv("DB_HOST", "carrier-sales-db.internal"),
+    "user":      os.getenv("DB_USER", "carrier_user"),
+    "password":  os.getenv("DB_PASS", "supersecret"),
+    "database":  os.getenv("DB_NAME", "carrier_db"),
+    "port":      3306,
 }
 
 # Warning logs
@@ -1003,6 +1011,16 @@ async def log_requests(request: Request, call_next):
     process_time = (datetime.now() - start_time).total_seconds()
     logger.info(f"📤 {request.method} {request.url.path} -> {response.status_code} ({process_time:.3f}s)")
     return response
+
+# main.py  – place this *after* initialize_database() and before any routes
+
+@app.on_event("startup")
+async def init_db_if_needed() -> None:
+    """
+    Run initialize_database() exactly once when the VM boots.
+    It’s OK that initialize_database() is sync—startup events may be sync.
+    """
+    initialize_database()
 
 # API Endpoints
 @app.get("/")
