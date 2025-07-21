@@ -1,26 +1,8 @@
-# fly.toml app configuration file generated for carrier-sales-db on 2025-07-21T14:20:53-04:00
-#
-# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
-#
-
-app = 'carrier-sales-db'
-primary_region = 'bos'
+app = "carrier-sales-db"
+primary_region = "bos"
 
 [build]
-  image = 'mysql:8'
-
-[http_service]
-  internal_port = 8080
-  force_https = true
-  auto_stop_machines = 'stop'
-  auto_start_machines = true
-  min_machines_running = 0
-  processes = ['app']
-
-[[vm]]
-  memory = '1gb'
-  cpu_kind = 'shared'
-  cpus = 1
+  image = "mysql:8"
 
 [env]
   MYSQL_DATABASE = "carrier_db"
@@ -28,6 +10,11 @@ primary_region = 'bos'
   MYSQL_PASSWORD = "supersecret"
   MYSQL_ROOT_PASSWORD = "rootsecret"
 
-[mounts]
+[[mounts]]
   source      = "mysqldata"
   destination = "/var/lib/mysql"
+
+[experimental]
+  auto_rollback = false
+  auto_start_machines = true
+  auto_stop_machines  = false
