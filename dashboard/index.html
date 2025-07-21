@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inbound Carrier Sales Dashboard</title>
+    <title>Inbound Carrier Sales Dashboard - HappyRobot Integration</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/date-fns/2.29.3/index.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
@@ -20,6 +20,7 @@
             --success-color: #10b981;
             --warning-color: #f59e0b;
             --danger-color: #ef4444;
+            --info-color: #06b6d4;
             --dark-color: #1f2937;
             --light-color: #f8fafc;
             --border-color: #e5e7eb;
@@ -86,6 +87,25 @@
             border-radius: 20px;
             font-size: 0.9rem;
             color: var(--success-color);
+            transition: all 0.3s ease;
+        }
+
+        .status-item.warning {
+            background: rgba(245, 158, 11, 0.1);
+            border-color: rgba(245, 158, 11, 0.3);
+            color: var(--warning-color);
+        }
+
+        .status-item.error {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: rgba(239, 68, 68, 0.3);
+            color: var(--danger-color);
+        }
+
+        .status-item.info {
+            background: rgba(6, 182, 212, 0.1);
+            border-color: rgba(6, 182, 212, 0.3);
+            color: var(--info-color);
         }
 
         .status-indicator {
@@ -96,9 +116,35 @@
             animation: pulse 2s infinite;
         }
 
+        .status-indicator.warning { background: var(--warning-color); }
+        .status-indicator.error { background: var(--danger-color); }
+        .status-indicator.info { background: var(--info-color); }
+
         @keyframes pulse {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
+        }
+
+        .data-source-banner {
+            background: linear-gradient(90deg, var(--info-color), var(--primary-color));
+            color: white;
+            padding: 12px 24px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            font-weight: 600;
+            box-shadow: var(--shadow);
+        }
+
+        .data-source-banner.happyrobot {
+            background: linear-gradient(90deg, var(--success-color), var(--info-color));
+        }
+
+        .data-source-banner.mock {
+            background: linear-gradient(90deg, var(--warning-color), var(--danger-color));
         }
 
         .metrics-grid {
@@ -185,6 +231,7 @@
 
         .trend-up { color: var(--success-color); }
         .trend-down { color: var(--danger-color); }
+        .trend-neutral { color: #6b7280; }
 
         .charts-section {
             margin-bottom: 40px;
@@ -239,38 +286,6 @@
             height: 300px;
         }
 
-        .data-table {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(20px);
-            border-radius: 20px;
-            padding: 30px;
-            box-shadow: var(--shadow-lg);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            overflow: hidden;
-        }
-
-        .table-wrapper {
-            overflow-x: auto;
-            margin-top: 20px;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        th, td {
-            text-align: left;
-            padding: 12px 16px;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        th {
-            background: rgba(59, 130, 246, 0.1);
-            font-weight: 600;
-            color: var(--dark-color);
-        }
-
         .controls {
             display: flex;
             align-items: center;
@@ -314,6 +329,16 @@
         .btn-secondary:hover {
             background: white;
             transform: translateY(-2px);
+        }
+
+        .btn-info {
+            background: linear-gradient(135deg, var(--info-color), var(--primary-color));
+            box-shadow: var(--shadow);
+        }
+
+        .btn-info:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(6, 182, 212, 0.3);
         }
 
         .loading {
@@ -363,10 +388,83 @@
             z-index: 1000;
             transform: translateX(400px);
             transition: transform 0.3s ease;
+            max-width: 400px;
         }
 
         .toast.show {
             transform: translateX(0);
+        }
+
+        .toast.error {
+            border-left-color: var(--danger-color);
+        }
+
+        .toast.warning {
+            border-left-color: var(--warning-color);
+        }
+
+        .toast.info {
+            border-left-color: var(--info-color);
+        }
+
+        .integration-status {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow-lg);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .integration-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 16px;
+        }
+
+        .integration-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            background: rgba(249, 250, 251, 0.8);
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+        }
+
+        .integration-name {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+            color: var(--dark-color);
+        }
+
+        .integration-status-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .integration-status-badge.connected {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success-color);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .integration-status-badge.mock {
+            background: rgba(245, 158, 11, 0.1);
+            color: var(--warning-color);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+
+        .integration-status-badge.error {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--danger-color);
+            border: 1px solid rgba(239, 68, 68, 0.3);
         }
 
         .footer {
@@ -383,6 +481,7 @@
             .charts-grid { grid-template-columns: 1fr; }
             .metric-card, .chart-container { padding: 20px; }
             .controls { flex-direction: column; }
+            .integration-grid { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -390,15 +489,19 @@
     <div class="container">
         <div class="header">
             <h1><i class="fas fa-truck"></i> Inbound Carrier Sales Dashboard</h1>
-            <p>Real-time analytics for AI-powered carrier engagement</p>
+            <p>Real-time analytics powered by HappyRobot AI calls</p>
             <div class="status-bar">
                 <div class="status-item">
                     <div class="status-indicator"></div>
                     <span>API Active</span>
                 </div>
+                <div class="status-item" id="happyrobot-status">
+                    <div class="status-indicator info"></div>
+                    <span>HappyRobot Checking...</span>
+                </div>
                 <div class="status-item" id="fmcsa-status">
-                    <div class="status-indicator"></div>
-                    <span>FMCSA Connected</span>
+                    <div class="status-indicator warning"></div>
+                    <span>FMCSA Checking...</span>
                 </div>
                 <div class="status-item">
                     <div class="status-indicator"></div>
@@ -408,6 +511,47 @@
         </div>
 
         <div id="error-container"></div>
+        
+        <div id="data-source-banner" class="data-source-banner" style="display: none;">
+            <i class="fas fa-info-circle"></i>
+            <span id="data-source-text">Loading data source...</span>
+        </div>
+
+        <div class="integration-status">
+            <h3 style="margin-bottom: 16px; color: var(--dark-color);">
+                <i class="fas fa-plug"></i> Integration Status
+            </h3>
+            <div class="integration-grid">
+                <div class="integration-item">
+                    <div class="integration-name">
+                        <i class="fas fa-robot"></i>
+                        <span>HappyRobot API</span>
+                    </div>
+                    <div id="happyrobot-badge" class="integration-status-badge mock">Checking...</div>
+                </div>
+                <div class="integration-item">
+                    <div class="integration-name">
+                        <i class="fas fa-shield-alt"></i>
+                        <span>FMCSA API</span>
+                    </div>
+                    <div id="fmcsa-badge" class="integration-status-badge mock">Checking...</div>
+                </div>
+                <div class="integration-item">
+                    <div class="integration-name">
+                        <i class="fas fa-database"></i>
+                        <span>Database</span>
+                    </div>
+                    <div id="database-badge" class="integration-status-badge mock">Checking...</div>
+                </div>
+                <div class="integration-item">
+                    <div class="integration-name">
+                        <i class="fas fa-chart-line"></i>
+                        <span>Dashboard</span>
+                    </div>
+                    <div id="dashboard-badge" class="integration-status-badge connected">Active</div>
+                </div>
+            </div>
+        </div>
         
         <div class="metrics-grid">
             <div class="metric-card">
@@ -420,9 +564,9 @@
                         <i class="fas fa-phone"></i>
                     </div>
                 </div>
-                <div class="metric-trend trend-up" id="calls-trend">
-                    <i class="fas fa-arrow-up"></i>
-                    <span>+12% this week</span>
+                <div class="metric-trend trend-neutral" id="calls-trend">
+                    <i class="fas fa-chart-line"></i>
+                    <span>From HappyRobot data</span>
                 </div>
             </div>
 
@@ -436,9 +580,9 @@
                         <i class="fas fa-clock"></i>
                     </div>
                 </div>
-                <div class="metric-trend trend-up" id="recent-trend">
-                    <i class="fas fa-arrow-up"></i>
-                    <span>+8% vs last week</span>
+                <div class="metric-trend trend-neutral" id="recent-trend">
+                    <i class="fas fa-calendar-week"></i>
+                    <span>Last 7 days activity</span>
                 </div>
             </div>
 
@@ -452,9 +596,9 @@
                         <i class="fas fa-chart-line"></i>
                     </div>
                 </div>
-                <div class="metric-trend" id="conversion-trend">
-                    <i class="fas fa-arrow-up"></i>
-                    <span>Industry avg: 15%</span>
+                <div class="metric-trend trend-neutral" id="conversion-trend">
+                    <i class="fas fa-percentage"></i>
+                    <span>Calls resulting in bookings</span>
                 </div>
             </div>
 
@@ -468,22 +612,22 @@
                         <i class="fas fa-dollar-sign"></i>
                     </div>
                 </div>
-                <div class="metric-trend trend-up" id="rate-trend">
-                    <i class="fas fa-arrow-up"></i>
-                    <span>+3% vs last month</span>
+                <div class="metric-trend trend-neutral" id="rate-trend">
+                    <i class="fas fa-handshake"></i>
+                    <span>Average accepted rates</span>
                 </div>
             </div>
         </div>
 
         <div class="charts-section">
-            <h2 class="section-title">Performance Analytics</h2>
+            <h2 class="section-title">HappyRobot Call Analytics</h2>
             
             <div class="charts-grid">
                 <div class="chart-container">
                     <div class="chart-header">
                         <div>
-                            <div class="chart-title">Call Classifications</div>
-                            <div class="chart-subtitle">Breakdown of call outcomes</div>
+                            <div class="chart-title">Call Outcomes</div>
+                            <div class="chart-subtitle">Classification from HappyRobot calls</div>
                         </div>
                     </div>
                     <div class="chart-wrapper">
@@ -495,7 +639,7 @@
                     <div class="chart-header">
                         <div>
                             <div class="chart-title">Carrier Sentiment</div>
-                            <div class="chart-subtitle">Sentiment analysis results</div>
+                            <div class="chart-subtitle">AI-analyzed sentiment from transcripts</div>
                         </div>
                     </div>
                     <div class="chart-wrapper">
@@ -522,6 +666,10 @@
                 <i class="fas fa-sync-alt"></i>
                 Refresh Data
             </button>
+            <button class="btn btn-info" onclick="testHappyRobotIntegration()">
+                <i class="fas fa-robot"></i>
+                Test HappyRobot
+            </button>
             <button class="btn btn-secondary" onclick="exportData()">
                 <i class="fas fa-download"></i>
                 Export Report
@@ -533,30 +681,37 @@
         </div>
 
         <div class="footer">
-            <p>© 2025 Inbound Carrier Sales AI Dashboard | Last Updated: <span id="last-update">-</span></p>
+            <p>© 2025 Inbound Carrier Sales AI Dashboard with HappyRobot Integration | Last Updated: <span id="last-update">-</span></p>
+            <p style="margin-top: 8px; font-size: 0.8rem;">Data Source: <span id="footer-data-source">Loading...</span></p>
         </div>
     </div>
 
     <script>
-        // Configuration - UPDATED API URL
+        // Configuration
         const API_BASE_URL = window.location.hostname === 'localhost' 
             ? 'http://localhost:8000' 
             : 'https://carrier-sales-kavin.fly.dev';
         const API_KEY = 'secure-api-key-change-this-in-production';
-        const REFRESH_INTERVAL = 30000; // 30 seconds
+        const REFRESH_INTERVAL = 60000; // 60 seconds for real data
 
         // Chart instances
         let classificationsChart = null;
         let sentimentChart = null;
         let equipmentChart = null;
 
+        // Current data source
+        let currentDataSource = 'loading';
+
         // Utility functions
         function showToast(message, type = 'success') {
             const toast = document.createElement('div');
             toast.className = `toast ${type}`;
             toast.innerHTML = `
-                <i class="fas fa-${type === 'success' ? 'check' : 'exclamation'}-circle"></i>
-                <span>${message}</span>
+                <i class="fas fa-${getToastIcon(type)}"></i>
+                <div>
+                    <strong>${getToastTitle(type)}</strong><br>
+                    <span style="font-size: 0.9rem;">${message}</span>
+                </div>
             `;
             document.body.appendChild(toast);
             
@@ -564,7 +719,27 @@
             setTimeout(() => {
                 toast.classList.remove('show');
                 setTimeout(() => document.body.removeChild(toast), 300);
-            }, 3000);
+            }, 5000);
+        }
+
+        function getToastIcon(type) {
+            const icons = {
+                'success': 'check-circle',
+                'error': 'exclamation-circle',
+                'warning': 'exclamation-triangle',
+                'info': 'info-circle'
+            };
+            return icons[type] || 'info-circle';
+        }
+
+        function getToastTitle(type) {
+            const titles = {
+                'success': 'Success',
+                'error': 'Error',
+                'warning': 'Warning',
+                'info': 'Information'
+            };
+            return titles[type] || 'Notice';
         }
 
         async function fetchWithAuth(url) {
@@ -584,6 +759,79 @@
             } catch (error) {
                 console.error('API Error:', error);
                 throw error;
+            }
+        }
+
+        function updateDataSourceBanner(dataSource) {
+            const banner = document.getElementById('data-source-banner');
+            const text = document.getElementById('data-source-text');
+            const footerSource = document.getElementById('footer-data-source');
+            
+            banner.style.display = 'flex';
+            currentDataSource = dataSource;
+            
+            switch(dataSource) {
+                case 'happyrobot_api':
+                    banner.className = 'data-source-banner happyrobot';
+                    text.innerHTML = '<i class="fas fa-robot"></i> Real data from HappyRobot API calls';
+                    footerSource.textContent = 'HappyRobot API (Real-time)';
+                    break;
+                case 'happyrobot_database':
+                    banner.className = 'data-source-banner happyrobot';
+                    text.innerHTML = '<i class="fas fa-database"></i> Real data from HappyRobot synced to database';
+                    footerSource.textContent = 'HappyRobot Database (Real-time)';
+                    break;
+                case 'fallback_mock':
+                    banner.className = 'data-source-banner mock';
+                    text.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Mock data - HappyRobot API not available';
+                    footerSource.textContent = 'Mock Data (Fallback)';
+                    break;
+                default:
+                    banner.className = 'data-source-banner mock';
+                    text.innerHTML = '<i class="fas fa-question-circle"></i> Unknown data source';
+                    footerSource.textContent = 'Unknown';
+            }
+        }
+
+        function updateIntegrationStatus(service, status) {
+            const badge = document.getElementById(`${service}-badge`);
+            const statusItem = document.getElementById(`${service}-status`);
+            
+            if (badge) {
+                badge.className = `integration-status-badge ${status}`;
+                
+                switch(status) {
+                    case 'connected':
+                        badge.textContent = 'Connected';
+                        if (statusItem) {
+                            statusItem.className = 'status-item';
+                            statusItem.innerHTML = `
+                                <div class="status-indicator"></div>
+                                <span>${service === 'happyrobot' ? 'HappyRobot' : 'FMCSA'} Connected</span>
+                            `;
+                        }
+                        break;
+                    case 'mock':
+                        badge.textContent = 'Mock Mode';
+                        if (statusItem) {
+                            statusItem.className = 'status-item warning';
+                            statusItem.innerHTML = `
+                                <div class="status-indicator warning"></div>
+                                <span>${service === 'happyrobot' ? 'HappyRobot' : 'FMCSA'} Mock</span>
+                            `;
+                        }
+                        break;
+                    case 'error':
+                        badge.textContent = 'Error';
+                        if (statusItem) {
+                            statusItem.className = 'status-item error';
+                            statusItem.innerHTML = `
+                                <div class="status-indicator error"></div>
+                                <span>${service === 'happyrobot' ? 'HappyRobot' : 'FMCSA'} Error</span>
+                            `;
+                        }
+                        break;
+                }
             }
         }
 
@@ -646,23 +894,24 @@
         async function checkAPIHealth() {
             try {
                 const health = await fetchWithAuth(`${API_BASE_URL}/health`);
-                const fmcsaStatus = document.getElementById('fmcsa-status');
                 
-                if (health.fmcsa_api === 'configured') {
-                    fmcsaStatus.innerHTML = `
-                        <div class="status-indicator"></div>
-                        <span>FMCSA Connected</span>
-                    `;
-                } else {
-                    fmcsaStatus.innerHTML = `
-                        <div class="status-indicator" style="background: var(--warning-color)"></div>
-                        <span>FMCSA Mock Mode</span>
-                    `;
+                // Update integration statuses
+                if (health.services) {
+                    const happyrobotStatus = health.services.happyrobot_api === 'configured' ? 'connected' : 'mock';
+                    const fmcsaStatus = health.services.fmcsa_api === 'configured' ? 'connected' : 'mock';
+                    const databaseStatus = health.services.database === 'connected' ? 'connected' : 'mock';
+                    
+                    updateIntegrationStatus('happyrobot', happyrobotStatus);
+                    updateIntegrationStatus('fmcsa', fmcsaStatus);
+                    updateIntegrationStatus('database', databaseStatus);
                 }
                 
                 return true;
             } catch (error) {
                 console.error('Health check failed:', error);
+                updateIntegrationStatus('happyrobot', 'error');
+                updateIntegrationStatus('fmcsa', 'error');
+                updateIntegrationStatus('database', 'error');
                 return false;
             }
         }
@@ -678,9 +927,12 @@
                     throw new Error('API health check failed');
                 }
 
-                // FIXED: Proper API call and data extraction
+                // Fetch dashboard metrics
                 const data = await fetchWithAuth(`${API_BASE_URL}/dashboard-metrics`);
                 const metrics = data.metrics;
+
+                // Update data source banner
+                updateDataSourceBanner(metrics.data_source);
 
                 // Update metric cards
                 document.getElementById('total-calls').textContent = metrics.summary.total_calls;
@@ -688,19 +940,23 @@
                 document.getElementById('conversion-rate').textContent = `${metrics.summary.conversion_rate}%`;
                 document.getElementById('avg-rate').textContent = `$${metrics.summary.average_negotiated_rate.toLocaleString()}`;
 
+                // Update trend information based on data source
+                updateTrendInfo(metrics.data_source);
+
                 // Update last refresh time
                 document.getElementById('last-update').textContent = new Date().toLocaleString();
 
-                // Update classifications chart
+                // Update charts
                 updateClassificationsChart(metrics.classifications);
-                
-                // Update sentiment chart
                 updateSentimentChart(metrics.sentiments);
-                
-                // Update equipment chart
                 updateEquipmentChart(metrics.equipment_performance);
 
-                showToast('Dashboard updated successfully!');
+                // Show success message based on data source
+                if (metrics.data_source.includes('happyrobot')) {
+                    showToast('Dashboard updated with real HappyRobot data!', 'success');
+                } else {
+                    showToast('Dashboard updated with mock data (HappyRobot not available)', 'warning');
+                }
 
             } catch (error) {
                 console.error('Error loading dashboard:', error);
@@ -708,6 +964,49 @@
                 showToast('Failed to update dashboard', 'error');
             } finally {
                 updateLoadingState(false);
+            }
+        }
+
+        function updateTrendInfo(dataSource) {
+            const callsTrend = document.getElementById('calls-trend');
+            const recentTrend = document.getElementById('recent-trend');
+            const conversionTrend = document.getElementById('conversion-trend');
+            const rateTrend = document.getElementById('rate-trend');
+
+            if (dataSource.includes('happyrobot')) {
+                callsTrend.innerHTML = '<i class="fas fa-robot"></i><span>From HappyRobot calls</span>';
+                recentTrend.innerHTML = '<i class="fas fa-calendar-week"></i><span>Real activity data</span>';
+                conversionTrend.innerHTML = '<i class="fas fa-chart-line"></i><span>Actual conversion rate</span>';
+                rateTrend.innerHTML = '<i class="fas fa-dollar-sign"></i><span>Real negotiated rates</span>';
+            } else {
+                callsTrend.innerHTML = '<i class="fas fa-exclamation-triangle"></i><span>Mock data</span>';
+                recentTrend.innerHTML = '<i class="fas fa-exclamation-triangle"></i><span>Mock data</span>';
+                conversionTrend.innerHTML = '<i class="fas fa-exclamation-triangle"></i><span>Mock data</span>';
+                rateTrend.innerHTML = '<i class="fas fa-exclamation-triangle"></i><span>Mock data</span>';
+            }
+        }
+
+        async function testHappyRobotIntegration() {
+            try {
+                showToast('Testing HappyRobot integration...', 'info');
+                
+                const result = await fetchWithAuth(`${API_BASE_URL}/test-happyrobot`);
+                
+                if (result.success) {
+                    showToast(`HappyRobot connected! Fetched ${result.calls_fetched} calls`, 'success');
+                    updateIntegrationStatus('happyrobot', 'connected');
+                    
+                    // Refresh dashboard with new data
+                    setTimeout(() => loadDashboard(), 1000);
+                } else {
+                    showToast(`HappyRobot test failed: ${result.error}`, 'error');
+                    updateIntegrationStatus('happyrobot', 'error');
+                }
+                
+            } catch (error) {
+                console.error('HappyRobot test error:', error);
+                showToast('Failed to test HappyRobot integration', 'error');
+                updateIntegrationStatus('happyrobot', 'error');
             }
         }
 
@@ -728,7 +1027,8 @@
                 '#f59e0b', // yellow for negotiation
                 '#ef4444', // red for not interested
                 '#3b82f6', // blue for inquiry
-                '#8b5cf6'  // purple for other
+                '#8b5cf6', // purple for follow_up
+                '#06b6d4'  // cyan for other
             ];
 
             classificationsChart = createChart(ctx, {
@@ -863,7 +1163,7 @@
             
             loadDashboard();
             
-            // Auto-refresh every 30 seconds
+            // Auto-refresh every minute for real-time data
             setInterval(loadDashboard, REFRESH_INTERVAL);
             
             // Add keyboard shortcuts
@@ -871,6 +1171,10 @@
                 if (e.ctrlKey && e.key === 'r') {
                     e.preventDefault();
                     loadDashboard();
+                }
+                if (e.ctrlKey && e.key === 't') {
+                    e.preventDefault();
+                    testHappyRobotIntegration();
                 }
             });
         });
