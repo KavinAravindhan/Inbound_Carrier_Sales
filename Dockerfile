@@ -44,6 +44,9 @@ WORKDIR /app
 # Copy application code
 COPY backend/ /app/
 
+# Copy dashboard code
+COPY dashboard/ /app/dashboard/
+
 # Copy .env file if it exists (optional)
 COPY .env* /app/
 

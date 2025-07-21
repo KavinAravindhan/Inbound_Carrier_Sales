@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inbound Carrier Sales Dashboard - HappyRobot Integration</title>
+    <title>Real-time Carrier Sales Dashboard - HappyRobot Integration</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/date-fns/2.29.3/index.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
@@ -143,8 +143,113 @@
             background: linear-gradient(90deg, var(--success-color), var(--info-color));
         }
 
+        .data-source-banner.webhook {
+            background: linear-gradient(90deg, #10b981, #059669);
+            animation: pulse-green 3s infinite;
+        }
+
+        @keyframes pulse-green {
+            0%, 100% { background: linear-gradient(90deg, #10b981, #059669); }
+            50% { background: linear-gradient(90deg, #059669, #047857); }
+        }
+
         .data-source-banner.mock {
             background: linear-gradient(90deg, var(--warning-color), var(--danger-color));
+        }
+
+        .webhook-activity {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow-lg);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .activity-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .activity-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--dark-color);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .activity-feed {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 16px;
+            background: rgba(249, 250, 251, 0.8);
+        }
+
+        .activity-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .activity-item:last-child {
+            border-bottom: none;
+        }
+
+        .activity-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .activity-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            color: white;
+        }
+
+        .activity-icon.positive { background: var(--success-color); }
+        .activity-icon.neutral { background: var(--info-color); }
+        .activity-icon.negative { background: var(--danger-color); }
+
+        .activity-details {
+            flex-grow: 1;
+        }
+
+        .activity-carrier {
+            font-weight: 600;
+            color: var(--dark-color);
+        }
+
+        .activity-description {
+            font-size: 0.9rem;
+            color: #6b7280;
+        }
+
+        .activity-time {
+            font-size: 0.8rem;
+            color: #9ca3af;
+            text-align: right;
+        }
+
+        .no-activity {
+            text-align: center;
+            color: #6b7280;
+            padding: 40px 20px;
+            font-style: italic;
         }
 
         .metrics-grid {
@@ -341,6 +446,16 @@
             box-shadow: 0 8px 25px rgba(6, 182, 212, 0.3);
         }
 
+        .btn-success {
+            background: linear-gradient(135deg, var(--success-color), #059669);
+            box-shadow: var(--shadow);
+        }
+
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(16, 185, 129, 0.3);
+        }
+
         .loading {
             display: flex;
             align-items: center;
@@ -488,12 +603,16 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1><i class="fas fa-truck"></i> Inbound Carrier Sales Dashboard</h1>
-            <p>Real-time analytics powered by HappyRobot AI calls</p>
+            <h1><i class="fas fa-truck"></i> Real-time Carrier Sales Dashboard</h1>
+            <p>Live analytics from HappyRobot webhook calls</p>
             <div class="status-bar">
                 <div class="status-item">
                     <div class="status-indicator"></div>
                     <span>API Active</span>
+                </div>
+                <div class="status-item" id="webhook-status">
+                    <div class="status-indicator info"></div>
+                    <span>Webhooks Ready</span>
                 </div>
                 <div class="status-item" id="happyrobot-status">
                     <div class="status-indicator info"></div>
@@ -502,10 +621,6 @@
                 <div class="status-item" id="fmcsa-status">
                     <div class="status-indicator warning"></div>
                     <span>FMCSA Checking...</span>
-                </div>
-                <div class="status-item">
-                    <div class="status-indicator"></div>
-                    <span>Real-time Updates</span>
                 </div>
             </div>
         </div>
@@ -517,6 +632,26 @@
             <span id="data-source-text">Loading data source...</span>
         </div>
 
+        <div class="webhook-activity">
+            <div class="activity-header">
+                <div class="activity-title">
+                    <i class="fas fa-bolt"></i>
+                    <span>Live Webhook Activity</span>
+                    <span id="activity-count" style="background: var(--success-color); color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.8rem;">0</span>
+                </div>
+                <button class="btn btn-success btn-sm" onclick="refreshActivity()" style="padding: 6px 12px; font-size: 0.9rem;">
+                    <i class="fas fa-sync-alt"></i>
+                    Refresh
+                </button>
+            </div>
+            <div class="activity-feed" id="activity-feed">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <span>Loading webhook activity...</span>
+                </div>
+            </div>
+        </div>
+
         <div class="integration-status">
             <h3 style="margin-bottom: 16px; color: var(--dark-color);">
                 <i class="fas fa-plug"></i> Integration Status
@@ -525,9 +660,9 @@
                 <div class="integration-item">
                     <div class="integration-name">
                         <i class="fas fa-robot"></i>
-                        <span>HappyRobot API</span>
+                        <span>HappyRobot Webhooks</span>
                     </div>
-                    <div id="happyrobot-badge" class="integration-status-badge mock">Checking...</div>
+                    <div id="happyrobot-badge" class="integration-status-badge mock">Ready</div>
                 </div>
                 <div class="integration-item">
                     <div class="integration-name">
@@ -558,15 +693,15 @@
                 <div class="metric-header">
                     <div>
                         <div class="metric-value" id="total-calls">-</div>
-                        <div class="metric-label">Total Calls</div>
+                        <div class="metric-label">Total Webhook Calls</div>
                     </div>
                     <div class="metric-icon calls">
                         <i class="fas fa-phone"></i>
                     </div>
                 </div>
                 <div class="metric-trend trend-neutral" id="calls-trend">
-                    <i class="fas fa-chart-line"></i>
-                    <span>From HappyRobot data</span>
+                    <i class="fas fa-webhook"></i>
+                    <span>From HappyRobot webhooks</span>
                 </div>
             </div>
 
@@ -574,15 +709,15 @@
                 <div class="metric-header">
                     <div>
                         <div class="metric-value" id="recent-calls">-</div>
-                        <div class="metric-label">Recent Calls (7 days)</div>
+                        <div class="metric-label">Recent Calls (24h)</div>
                     </div>
                     <div class="metric-icon recent">
                         <i class="fas fa-clock"></i>
                     </div>
                 </div>
                 <div class="metric-trend trend-neutral" id="recent-trend">
-                    <i class="fas fa-calendar-week"></i>
-                    <span>Last 7 days activity</span>
+                    <i class="fas fa-calendar-day"></i>
+                    <span>Last 24 hours activity</span>
                 </div>
             </div>
 
@@ -598,7 +733,7 @@
                 </div>
                 <div class="metric-trend trend-neutral" id="conversion-trend">
                     <i class="fas fa-percentage"></i>
-                    <span>Calls resulting in bookings</span>
+                    <span>Real webhook conversions</span>
                 </div>
             </div>
 
@@ -614,20 +749,20 @@
                 </div>
                 <div class="metric-trend trend-neutral" id="rate-trend">
                     <i class="fas fa-handshake"></i>
-                    <span>Average accepted rates</span>
+                    <span>From real negotiations</span>
                 </div>
             </div>
         </div>
 
         <div class="charts-section">
-            <h2 class="section-title">HappyRobot Call Analytics</h2>
+            <h2 class="section-title">Real-time HappyRobot Analytics</h2>
             
             <div class="charts-grid">
                 <div class="chart-container">
                     <div class="chart-header">
                         <div>
-                            <div class="chart-title">Call Outcomes</div>
-                            <div class="chart-subtitle">Classification from HappyRobot calls</div>
+                            <div class="chart-title">Live Call Outcomes</div>
+                            <div class="chart-subtitle">Real-time classification from webhook calls</div>
                         </div>
                     </div>
                     <div class="chart-wrapper">
@@ -639,7 +774,7 @@
                     <div class="chart-header">
                         <div>
                             <div class="chart-title">Carrier Sentiment</div>
-                            <div class="chart-subtitle">AI-analyzed sentiment from transcripts</div>
+                            <div class="chart-subtitle">AI-analyzed sentiment from live calls</div>
                         </div>
                     </div>
                     <div class="chart-wrapper">
@@ -652,7 +787,7 @@
                 <div class="chart-header">
                     <div>
                         <div class="chart-title">Equipment Performance</div>
-                        <div class="chart-subtitle">Call volume by equipment type</div>
+                        <div class="chart-subtitle">Live call volume by equipment type</div>
                     </div>
                 </div>
                 <div class="chart-wrapper">
@@ -670,6 +805,10 @@
                 <i class="fas fa-robot"></i>
                 Test HappyRobot
             </button>
+            <button class="btn btn-success" onclick="showWebhookInfo()">
+                <i class="fas fa-webhook"></i>
+                Webhook Info
+            </button>
             <button class="btn btn-secondary" onclick="exportData()">
                 <i class="fas fa-download"></i>
                 Export Report
@@ -681,8 +820,8 @@
         </div>
 
         <div class="footer">
-            <p>© 2025 Inbound Carrier Sales AI Dashboard with HappyRobot Integration | Last Updated: <span id="last-update">-</span></p>
-            <p style="margin-top: 8px; font-size: 0.8rem;">Data Source: <span id="footer-data-source">Loading...</span></p>
+            <p>© 2025 Real-time Carrier Sales AI Dashboard | Last Updated: <span id="last-update">-</span></p>
+            <p style="margin-top: 8px; font-size: 0.8rem;">Data Source: <span id="footer-data-source">Loading...</span> | Auto-refresh: <span id="refresh-status">Every 30s</span></p>
         </div>
     </div>
 
@@ -692,7 +831,8 @@
             ? 'http://localhost:8000' 
             : 'https://carrier-sales-kavin.fly.dev';
         const API_KEY = 'secure-api-key-change-this-in-production';
-        const REFRESH_INTERVAL = 60000; // 60 seconds for real data
+        const REFRESH_INTERVAL = 30000; // 30 seconds for real-time updates
+        const ACTIVITY_REFRESH_INTERVAL = 15000; // 15 seconds for activity updates
 
         // Chart instances
         let classificationsChart = null;
@@ -701,6 +841,7 @@
 
         // Current data source
         let currentDataSource = 'loading';
+        let lastActivityCount = 0;
 
         // Utility functions
         function showToast(message, type = 'success') {
@@ -771,21 +912,25 @@
             currentDataSource = dataSource;
             
             switch(dataSource) {
-                case 'happyrobot_api':
-                    banner.className = 'data-source-banner happyrobot';
-                    text.innerHTML = '<i class="fas fa-robot"></i> Real data from HappyRobot API calls';
-                    footerSource.textContent = 'HappyRobot API (Real-time)';
+                case 'webhook_database_real_time':
+                case 'webhook_database':
+                    banner.className = 'data-source-banner webhook';
+                    text.innerHTML = '<i class="fas fa-bolt"></i> LIVE DATA from HappyRobot webhooks';
+                    footerSource.textContent = 'Real-time Webhook Data';
                     break;
-                case 'happyrobot_database':
-                    banner.className = 'data-source-banner happyrobot';
-                    text.innerHTML = '<i class="fas fa-database"></i> Real data from HappyRobot synced to database';
-                    footerSource.textContent = 'HappyRobot Database (Real-time)';
-                    break;
-                case 'fallback_mock':
+                case 'enhanced_mock_data':
                     banner.className = 'data-source-banner mock';
-                    text.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Mock data - HappyRobot API not available';
-                    footerSource.textContent = 'Mock Data (Fallback)';
+                    text.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Mock data - No webhook calls received yet';
+                    footerSource.textContent = 'Mock Data (No Webhooks)';
                     break;
+                    // if (metrics.summary.total_calls > 0) {
+                    //     banner.className = 'data-source-banner webhook';
+                    //     text.innerHTML = '… LIVE DATA from HappyRobot webhooks';
+                    // } else {
+                    //     banner.className = 'data-source-banner mock';
+                    //     text.innerHTML = '… Mock data - No webhook calls received yet';
+                    // }
+                    // break;
                 default:
                     banner.className = 'data-source-banner mock';
                     text.innerHTML = '<i class="fas fa-question-circle"></i> Unknown data source';
@@ -861,6 +1006,86 @@
             });
         }
 
+        async function refreshActivity() {
+            try {
+                const data = await fetchWithAuth(`${API_BASE_URL}/dashboard/activity`);
+                const activityFeed = document.getElementById('activity-feed');
+                const activityCount = document.getElementById('activity-count');
+                
+                if (data.success && data.activity.length > 0) {
+                    activityCount.textContent = data.activity.length;
+                    
+                    // Check for new activity
+                    if (data.activity.length > lastActivityCount) {
+                        showToast(`${data.activity.length - lastActivityCount} new webhook call(s) received!`, 'success');
+                    }
+                    lastActivityCount = data.activity.length;
+                    
+                    activityFeed.innerHTML = data.activity.map(activity => {
+                        const timeAgo = activity.timestamp ? formatTimeAgo(new Date(activity.timestamp)) : 'Just now';
+                        const sentimentIcon = activity.sentiment === 'positive' ? 'positive' : 
+                                            activity.sentiment === 'negative' ? 'negative' : 'neutral';
+                        
+                        return `
+                            <div class="activity-item">
+                                <div class="activity-info">
+                                    <div class="activity-icon ${sentimentIcon}">
+                                        <i class="fas fa-phone"></i>
+                                    </div>
+                                    <div class="activity-details">
+                                        <div class="activity-carrier">${activity.carrier}</div>
+                                        <div class="activity-description">
+                                            ${activity.outcome.replace('_', ' ').toUpperCase()} • 
+                                            ${activity.equipment || 'No equipment specified'} • 
+                                            ${activity.sentiment.toUpperCase()} sentiment
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="activity-time">${timeAgo}</div>
+                            </div>
+                        `;
+                    }).join('');
+                } else {
+                    activityCount.textContent = '0';
+                    activityFeed.innerHTML = `
+                        <div class="no-activity">
+                            <i class="fas fa-phone-slash" style="font-size: 2rem; margin-bottom: 12px; opacity: 0.5;"></i>
+                            <p>No webhook calls received yet.</p>
+                            <p style="margin-top: 8px; font-size: 0.9rem;">
+                                Configure your HappyRobot campaign to send webhooks to:<br>
+                                <code style="background: rgba(0,0,0,0.1); padding: 4px 8px; border-radius: 4px;">
+                                    ${API_BASE_URL}/webhooks/happyrobot/call-completed
+                                </code>
+                            </p>
+                        </div>
+                    `;
+                }
+                
+            } catch (error) {
+                console.error('Error refreshing activity:', error);
+                const activityFeed = document.getElementById('activity-feed');
+                activityFeed.innerHTML = `
+                    <div class="error" style="margin: 0;">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <span>Failed to load activity: ${error.message}</span>
+                    </div>
+                `;
+            }
+        }
+
+        function formatTimeAgo(date) {
+            const now = new Date();
+            const diff = now - date;
+            const minutes = Math.floor(diff / 60000);
+            const hours = Math.floor(diff / 3600000);
+            const days = Math.floor(diff / 86400000);
+            
+            if (days > 0) return `${days}d ago`;
+            if (hours > 0) return `${hours}h ago`;
+            if (minutes > 0) return `${minutes}m ago`;
+            return 'Just now';
+        }
+
         function createChart(ctx, config) {
             return new Chart(ctx, {
                 ...config,
@@ -897,13 +1122,23 @@
                 
                 // Update integration statuses
                 if (health.services) {
-                    const happyrobotStatus = health.services.happyrobot_api === 'configured' ? 'connected' : 'mock';
+                    const happyrobotStatus = health.services.happyrobot_webhooks === 'webhook_ready' ? 'connected' : 'mock';
                     const fmcsaStatus = health.services.fmcsa_api === 'configured' ? 'connected' : 'mock';
                     const databaseStatus = health.services.database === 'connected' ? 'connected' : 'mock';
                     
                     updateIntegrationStatus('happyrobot', happyrobotStatus);
                     updateIntegrationStatus('fmcsa', fmcsaStatus);
                     updateIntegrationStatus('database', databaseStatus);
+                    
+                    // Update webhook status
+                    const webhookStatus = document.getElementById('webhook-status');
+                    if (happyrobotStatus === 'connected') {
+                        webhookStatus.className = 'status-item';
+                        webhookStatus.innerHTML = `
+                            <div class="status-indicator"></div>
+                            <span>Webhooks Active</span>
+                        `;
+                    }
                 }
                 
                 return true;
@@ -952,11 +1187,14 @@
                 updateEquipmentChart(metrics.equipment_performance);
 
                 // Show success message based on data source
-                if (metrics.data_source.includes('happyrobot')) {
-                    showToast('Dashboard updated with real HappyRobot data!', 'success');
+                if (metrics.data_source.includes('webhook')) {
+                    showToast('Dashboard updated with real webhook data!', 'success');
                 } else {
-                    showToast('Dashboard updated with mock data (HappyRobot not available)', 'warning');
+                    showToast('Dashboard updated with mock data (No webhooks received)', 'warning');
                 }
+
+                // Also refresh activity
+                await refreshActivity();
 
             } catch (error) {
                 console.error('Error loading dashboard:', error);
@@ -973,9 +1211,9 @@
             const conversionTrend = document.getElementById('conversion-trend');
             const rateTrend = document.getElementById('rate-trend');
 
-            if (dataSource.includes('happyrobot')) {
-                callsTrend.innerHTML = '<i class="fas fa-robot"></i><span>From HappyRobot calls</span>';
-                recentTrend.innerHTML = '<i class="fas fa-calendar-week"></i><span>Real activity data</span>';
+            if (dataSource.includes('webhook')) {
+                callsTrend.innerHTML = '<i class="fas fa-bolt"></i><span>From real webhooks</span>';
+                recentTrend.innerHTML = '<i class="fas fa-calendar-day"></i><span>Real activity data</span>';
                 conversionTrend.innerHTML = '<i class="fas fa-chart-line"></i><span>Actual conversion rate</span>';
                 rateTrend.innerHTML = '<i class="fas fa-dollar-sign"></i><span>Real negotiated rates</span>';
             } else {
@@ -993,7 +1231,7 @@
                 const result = await fetchWithAuth(`${API_BASE_URL}/test-happyrobot`);
                 
                 if (result.success) {
-                    showToast(`HappyRobot connected! Fetched ${result.calls_fetched} calls`, 'success');
+                    showToast(`HappyRobot webhooks ready! Status: ${result.webhook_status}`, 'success');
                     updateIntegrationStatus('happyrobot', 'connected');
                     
                     // Refresh dashboard with new data
@@ -1007,6 +1245,83 @@
                 console.error('HappyRobot test error:', error);
                 showToast('Failed to test HappyRobot integration', 'error');
                 updateIntegrationStatus('happyrobot', 'error');
+            }
+        }
+
+        async function showWebhookInfo() {
+            try {
+                const result = await fetchWithAuth(`${API_BASE_URL}/webhooks/debug`);
+                
+                const modal = document.createElement('div');
+                modal.style.cssText = `
+                    position: fixed; top: 0; left: 0; right: 0; bottom: 0; 
+                    background: rgba(0,0,0,0.5); display: flex; align-items: center; 
+                    justify-content: center; z-index: 1000;
+                `;
+                
+                modal.innerHTML = `
+                    <div style="background: white; padding: 30px; border-radius: 20px; max-width: 600px; max-height: 80vh; overflow-y: auto; box-shadow: var(--shadow-lg);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                            <h3 style="color: var(--dark-color); margin: 0;">
+                                <i class="fas fa-webhook"></i> HappyRobot Webhook Configuration
+                            </h3>
+                            <button onclick="this.closest('div').remove()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">×</button>
+                        </div>
+                        
+                        <div style="margin-bottom: 20px; padding: 16px; background: rgba(16, 185, 129, 0.1); border-radius: 12px; border-left: 4px solid var(--success-color);">
+                            <h4 style="margin: 0 0 12px 0; color: var(--success-color);">Webhook URLs for HappyRobot Campaign:</h4>
+                            <div style="font-family: monospace; font-size: 0.9rem; background: white; padding: 12px; border-radius: 8px; margin: 8px 0;">
+                                <strong>Call Completed:</strong><br>
+                                <code>${result.webhook_endpoints.call_completed}</code>
+                            </div>
+                            <div style="font-family: monospace; font-size: 0.9rem; background: white; padding: 12px; border-radius: 8px; margin: 8px 0;">
+                                <strong>Call Started:</strong><br>
+                                <code>${result.webhook_endpoints.call_started}</code>
+                            </div>
+                            <div style="font-family: monospace; font-size: 0.9rem; background: white; padding: 12px; border-radius: 8px; margin: 8px 0;">
+                                <strong>Classification:</strong><br>
+                                <code>${result.webhook_endpoints.call_classification}</code>
+                            </div>
+                        </div>
+                        
+                        <div style="margin-bottom: 20px; padding: 16px; background: rgba(6, 182, 212, 0.1); border-radius: 12px; border-left: 4px solid var(--info-color);">
+                            <h4 style="margin: 0 0 12px 0; color: var(--info-color);">Authentication:</h4>
+                            <div style="font-family: monospace; font-size: 0.9rem; background: white; padding: 12px; border-radius: 8px;">
+                                <strong>Header:</strong> Authorization<br>
+                                <strong>Value:</strong> ${result.authentication}
+                            </div>
+                        </div>
+                        
+                        <div style="margin-bottom: 20px;">
+                            <h4 style="margin: 0 0 12px 0; color: var(--dark-color);">Recent Webhook Activity:</h4>
+                            <div style="background: rgba(249, 250, 251, 0.8); padding: 12px; border-radius: 8px; font-family: monospace; font-size: 0.9rem;">
+                                Total webhook calls received: <strong>${result.recent_webhook_calls}</strong><br>
+                                Database available: <strong>${result.database_available ? 'Yes' : 'No'}</strong><br>
+                                Environment: <strong>${result.environment}</strong>
+                            </div>
+                        </div>
+                        
+                        <div style="padding: 16px; background: rgba(245, 158, 11, 0.1); border-radius: 12px; border-left: 4px solid var(--warning-color);">
+                            <h4 style="margin: 0 0 12px 0; color: var(--warning-color);">Setup Instructions:</h4>
+                            <ol style="margin: 0; padding-left: 20px; color: #6b7280;">
+                                <li>Go to your HappyRobot campaign settings</li>
+                                <li>Add webhook URLs from above to your workflow</li>
+                                <li>Set method to POST with JSON payload</li>
+                                <li>Add Authorization header with Bearer token</li>
+                                <li>Test with a sample call to see real-time data</li>
+                            </ol>
+                        </div>
+                    </div>
+                `;
+                
+                document.body.appendChild(modal);
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) modal.remove();
+                });
+                
+            } catch (error) {
+                showToast('Failed to load webhook information', 'error');
+                console.error('Webhook info error:', error);
             }
         }
 
@@ -1163,8 +1478,11 @@
             
             loadDashboard();
             
-            // Auto-refresh every minute for real-time data
+            // Auto-refresh dashboard every 30 seconds
             setInterval(loadDashboard, REFRESH_INTERVAL);
+            
+            // Auto-refresh activity every 15 seconds
+            setInterval(refreshActivity, ACTIVITY_REFRESH_INTERVAL);
             
             // Add keyboard shortcuts
             document.addEventListener('keydown', function(e) {
@@ -1176,11 +1494,18 @@
                     e.preventDefault();
                     testHappyRobotIntegration();
                 }
+                if (e.ctrlKey && e.key === 'w') {
+                    e.preventDefault();
+                    showWebhookInfo();
+                }
             });
         });
 
         // Handle window focus for real-time updates
-        window.addEventListener('focus', loadDashboard);
+        window.addEventListener('focus', function() {
+            loadDashboard();
+            refreshActivity();
+        });
     </script>
 </body>
 </html>
