@@ -9,6 +9,8 @@ import mysql.connector
 import httpx
 import json
 import re
+import time
+import asyncio
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Dict, Any
 from contextlib import asynccontextmanager
@@ -18,16 +20,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 import uvicorn
 from dotenv import load_dotenv
-import asyncio
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
-import os
 from pathlib import Path
-import os
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import Column, String, Integer, Text, Float, DateTime
+from sqlalchemy import Column, String, Integer, Text, Float, DateTime, text
 from sqlalchemy.orm import declarative_base
+from sqlalchemy.dialects.mysql import insert as mysql_insert
 import datetime
 
 # Load environment variables
@@ -54,24 +54,16 @@ DEBUG = os.getenv("DEBUG", "true").lower() == "true"
 # Global variable to track database availability
 DATABASE_AVAILABLE = False
 
-# # MySQL Configuration
-# MYSQL_CONFIG = {
-#     'host': os.getenv("MYSQL_HOST", "localhost"),
-#     'port': int(os.getenv("MYSQL_PORT", "3306")),
-#     'user': os.getenv("MYSQL_USER", "root"),
-#     'password': os.getenv("MYSQL_PASSWORD", "kavin2002"),
-#     'database': os.getenv("MYSQL_DATABASE", "carrier_sales"),
-#     'charset': 'utf8mb4',
-#     'use_unicode': True,
-#     'autocommit': True
-# }
-
+# Fixed MySQL Configuration - Use environment variables consistently
 MYSQL_CONFIG = {
-    "host":      os.getenv("DB_HOST", "carrier-sales-db.internal"),
-    "user":      os.getenv("DB_USER", "carrier_user"),
-    "password":  os.getenv("DB_PASS", "supersecret"),
-    "database":  os.getenv("DB_NAME", "carrier_db"),
-    "port":      3306,
+    "host": os.getenv("DB_HOST", "carrier-sales-db.internal"),
+    "user": os.getenv("DB_USER", "carrier_user"), 
+    "password": os.getenv("DB_PASS", "supersecret"),
+    "database": os.getenv("DB_NAME", "carrier_db"),
+    "port": int(os.getenv("DB_PORT", "3306")),
+    "charset": 'utf8mb4',
+    "use_unicode": True,
+    "autocommit": True
 }
 
 # Warning logs
@@ -92,7 +84,9 @@ else:
 # ─── database setup ─────────────────────────────────────────────
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
-    raise RuntimeError("⚠️  Missing DATABASE_URL environment variable.")
+    # Construct from individual components if not provided
+    DATABASE_URL = f"mysql+aiomysql://{MYSQL_CONFIG['user']}:{MYSQL_CONFIG['password']}@{MYSQL_CONFIG['host']}:{MYSQL_CONFIG['port']}/{MYSQL_CONFIG['database']}"
+    logger.info(f"Constructed DATABASE_URL: mysql+aiomysql://{MYSQL_CONFIG['user']}:***@{MYSQL_CONFIG['host']}:{MYSQL_CONFIG['port']}/{MYSQL_CONFIG['database']}")
 
 engine = create_async_engine(
     DATABASE_URL, pool_recycle=1800, echo=False   # echo=True for SQL debug
@@ -126,29 +120,100 @@ class CallRecord(Base):
     updated_at         = Column(DateTime, default=datetime.datetime.utcnow,
                                 onupdate=datetime.datetime.utcnow)
 
-# Database connection functions
-def get_db_connection():
-    """Get MySQL database connection"""
-    global DATABASE_AVAILABLE
-    try:
-        connection = mysql.connector.connect(**MYSQL_CONFIG)
-        DATABASE_AVAILABLE = True
-        return connection
-    except mysql.connector.Error as err:
-        logger.error(f"Database connection error: {err}")
-        DATABASE_AVAILABLE = False
-        if ENVIRONMENT == "production":
-            logger.info("🚀 Production mode: Continuing with mock data")
-            return None
-        else:
-            return None
-
-def initialize_database():
-    """Initialize database with required tables and sample data"""
+# Enhanced database connection with retry logic
+def get_db_connection_with_retry(max_retries=3, delay=5):
+    """Get MySQL database connection with retry logic"""
     global DATABASE_AVAILABLE
     
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"Attempting database connection to {MYSQL_CONFIG['host']}:{MYSQL_CONFIG['port']} (attempt {attempt + 1}/{max_retries})")
+            connection = mysql.connector.connect(**MYSQL_CONFIG)
+            
+            # Test the connection
+            cursor = connection.cursor()
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+            cursor.close()
+            
+            DATABASE_AVAILABLE = True
+            logger.info(f"✅ Database connection successful to {MYSQL_CONFIG['host']}")
+            return connection
+            
+        except mysql.connector.Error as err:
+            logger.error(f"Database connection attempt {attempt + 1} failed: {err}")
+            if attempt < max_retries - 1:
+                logger.info(f"Retrying in {delay} seconds...")
+                time.sleep(delay)
+            else:
+                logger.error(f"All {max_retries} database connection attempts failed")
+                DATABASE_AVAILABLE = False
+                if ENVIRONMENT == "production":
+                    logger.info("🚀 Production mode: Continuing with mock data")
+                return None
+    
+    return None
+
+# Database connection functions
+def get_db_connection():
+    """Get MySQL database connection (wrapper)"""
+    return get_db_connection_with_retry()
+
+# Enhanced database initialization with proper async table creation
+async def initialize_database_async():
+    """Initialize database using async SQLAlchemy"""
     try:
-        conn = get_db_connection()
+        logger.info("🔄 Initializing database with async SQLAlchemy...")
+        
+        async with AsyncSessionLocal() as session:
+            # Create all tables
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            
+            # Check if we need to insert sample data
+            result = await session.execute(text("SELECT COUNT(*) as count FROM calls"))
+            call_count = result.scalar()
+            
+            if call_count == 0:
+                logger.info("📊 No existing call data found")
+                # Sample data can be inserted here if needed
+                
+            await session.commit()
+            logger.info("✅ Async database initialization completed")
+            return True
+            
+    except Exception as e:
+        logger.error(f"❌ Async database initialization failed: {e}")
+        return False
+
+def initialize_database():
+    """Enhanced database initialization with both sync and async approaches"""
+    global DATABASE_AVAILABLE
+    
+    # First, try async approach for SQLAlchemy tables
+    try:
+        # Run async initialization - handle event loop properly
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # We're in an async context, schedule it
+                asyncio.create_task(initialize_database_async())
+            else:
+                # Run in new event loop
+                asyncio.run(initialize_database_async())
+        except RuntimeError:
+            # If no event loop, create one
+            asyncio.run(initialize_database_async())
+        
+        DATABASE_AVAILABLE = True
+        logger.info("✅ SQLAlchemy tables created successfully")
+        
+    except Exception as async_error:
+        logger.error(f"Async database init failed: {async_error}")
+    
+    # Then, try sync approach for additional tables and sample data
+    try:
+        conn = get_db_connection_with_retry()
         if not conn:
             logger.info("📦 Running in mock data mode")
             DATABASE_AVAILABLE = False
@@ -156,7 +221,7 @@ def initialize_database():
             
         cursor = conn.cursor()
         
-        # Create loads table
+        # Create additional tables that might not be in SQLAlchemy models
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS loads (
                 load_id VARCHAR(50) PRIMARY KEY,
@@ -180,36 +245,7 @@ def initialize_database():
             )
         """)
         
-        # Enhanced calls table for HappyRobot data
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS calls (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                happyrobot_call_id VARCHAR(100) UNIQUE,
-                carrier_mc VARCHAR(20),
-                company_name VARCHAR(255),
-                call_duration INT DEFAULT 0,
-                call_transcript TEXT,
-                call_outcome ENUM('load_booked', 'negotiation', 'not_interested', 'inquiry_only', 'transferred') DEFAULT 'inquiry_only',
-                sentiment ENUM('positive', 'neutral', 'negative') DEFAULT 'neutral',
-                confidence_score DECIMAL(3,2) DEFAULT 0.00,
-                loads_discussed TEXT,
-                follow_up_date DATE,
-                call_status VARCHAR(50) DEFAULT 'completed',
-                equipment_type VARCHAR(100),
-                original_rate DECIMAL(10,2),
-                proposed_rate DECIMAL(10,2),
-                final_outcome VARCHAR(255),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                INDEX idx_happyrobot_id (happyrobot_call_id),
-                INDEX idx_carrier_mc (carrier_mc),
-                INDEX idx_call_outcome (call_outcome),
-                INDEX idx_sentiment (sentiment),
-                INDEX idx_created_at (created_at)
-            )
-        """)
-        
-        # Enhanced negotiations table
+        # Create negotiations table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS negotiations (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -230,7 +266,7 @@ def initialize_database():
             )
         """)
         
-        # Daily metrics snapshots
+        # Create metrics snapshots table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS metrics_snapshots (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -247,8 +283,7 @@ def initialize_database():
         """)
         
         conn.commit()
-        logger.info("✅ MySQL database initialized successfully")
-        DATABASE_AVAILABLE = True
+        logger.info("✅ Additional MySQL tables created successfully")
         
         # Insert sample loads if table is empty
         cursor.execute("SELECT COUNT(*) FROM loads")
@@ -273,9 +308,10 @@ def initialize_database():
         
         cursor.close()
         conn.close()
+        DATABASE_AVAILABLE = True
         
     except Exception as err:
-        logger.warning(f"⚠️  Database initialization failed: {err}")
+        logger.warning(f"⚠️  Sync database initialization failed: {err}")
         logger.info("📦 Running in mock data mode")
         DATABASE_AVAILABLE = False
 
@@ -612,7 +648,7 @@ async def get_real_time_metrics():
         cursor = conn.cursor(dictionary=True)
         
         # Get date ranges
-        today = datetime.now().date()
+        today = datetime.datetime.now().date()
         week_ago = today - timedelta(days=7)
         
         # Total calls from webhooks
@@ -704,7 +740,7 @@ async def get_real_time_metrics():
             "sentiments": sentiments,
             "equipment_performance": equipment_performance,
             "recent_activity": [],
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.datetime.now(timezone.utc).isoformat(),
             "data_source": "webhook_database_real_time"
         }
         
@@ -750,7 +786,7 @@ async def get_enhanced_fallback_metrics():
             {"type": "Step Deck", "calls": randint(1, 8)}
         ],
         "recent_activity": [],
-        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.datetime.now(timezone.utc).isoformat(),
         "data_source": "enhanced_mock_data"
     }
     
@@ -961,13 +997,21 @@ class CallDataExtractionRequest(BaseModel):
 class CallClassificationRequest(BaseModel):
     call_transcript: str
 
-# Lifespan event handler
+# Enhanced lifespan event handler
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan handler"""
+    """Application lifespan handler with proper async database initialization"""
     # Startup
     logger.info("🚛 Starting Enhanced Carrier Sales API with HappyRobot Integration...")
+    
+    # Initialize database
     initialize_database()
+    
+    # Also ensure async tables are created
+    try:
+        await initialize_database_async()
+    except Exception as e:
+        logger.warning(f"Async database init in lifespan failed: {e}")
     
     logger.info("✅ Enhanced Carrier Sales API started successfully")
     yield
@@ -1005,22 +1049,52 @@ def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(security)
 # Middleware for request logging
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    start_time = datetime.now()
+    start_time = datetime.datetime.now()
     logger.info(f"📥 {request.method} {request.url.path} from {request.client.host}")
     response = await call_next(request)
-    process_time = (datetime.now() - start_time).total_seconds()
+    process_time = (datetime.datetime.now() - start_time).total_seconds()
     logger.info(f"📤 {request.method} {request.url.path} -> {response.status_code} ({process_time:.3f}s)")
     return response
 
-# main.py  – place this *after* initialize_database() and before any routes
+# Global variables for in-memory webhook storage
+webhook_events: List[Dict] = []   # in-memory fallback store
 
-@app.on_event("startup")
-async def init_db_if_needed() -> None:
+# ── helper functions ────────────────────────────────────────────────────────────────
+async def store_webhook_call_data(
+    call_info: Dict,
+    db: Optional[AsyncSession] = None,          # db is optional → enables fallback
+) -> None:
     """
-    Run initialize_database() exactly once when the VM boots.
-    It’s OK that initialize_database() is sync—startup events may be sync.
+    Persist a HappyRobot webhook record.
+    • If `db` is provided  → upsert into MySQL.
+    • If `db` is None      → append to `webhook_events` in memory.
     """
-    initialize_database()
+    if db is None:
+        webhook_events.append(call_info)
+        logger.info("📊 Stored in-memory (%d total)", len(webhook_events))
+        return
+
+    stmt = mysql_insert(CallRecord).values(call_info)
+    # Build ON DUPLICATE KEY UPDATE for every column except PK & created_at
+    update_cols = {
+        col.name: stmt.inserted[col.name]
+        for col in CallRecord.__table__.c
+        if col.name not in ("happyrobot_call_id", "created_at")
+    }
+    stmt = stmt.on_duplicate_key_update(**update_cols)
+
+    try:
+        await db.execute(stmt)
+        await db.commit()
+        logger.info("✅ Stored %s in MySQL", call_info["happyrobot_call_id"])
+    except Exception as e:
+        await db.rollback()
+        logger.error("❌ MySQL error, falling back to memory: %s", e)
+        webhook_events.append(call_info)
+
+def get_in_memory_events(limit: int = 50) -> List[Dict]:
+    """Return the most-recent `limit` events kept only in RAM."""
+    return webhook_events[-limit:][::-1]
 
 # API Endpoints
 @app.get("/")
@@ -1033,6 +1107,7 @@ async def root():
         "integration_approach": "webhook_based_real_time",
         "fmcsa_api_available": bool(FMCSA_API_KEY),
         "happyrobot_webhooks_ready": bool(HAPPYROBOT_API_KEY),
+        "database_available": DATABASE_AVAILABLE,
         "documentation": "/docs",
         "health_check": "/health",
         "webhook_endpoints": [
@@ -1075,7 +1150,7 @@ async def health_check():
         
         return {
             "status": "healthy",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.datetime.now(timezone.utc).isoformat(),
             "environment": ENVIRONMENT,
             "services": {
                 "database": database_status,
@@ -1096,7 +1171,7 @@ async def health_check():
         logger.error(f"Health check failed: {e}")
         return {
             "status": "degraded",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.datetime.now(timezone.utc).isoformat(),
             "environment": ENVIRONMENT,
             "error": str(e)
         }
@@ -1110,10 +1185,10 @@ async def get_dashboard_metrics():
         # Get real metrics
         metrics = await get_real_time_metrics()
 
-        # If we’re still in “no-DB” mode but we’ve seen webhooks,
+        # If we're still in "no-DB" mode but we've seen webhooks,
         # relabel the data source so the banner turns green.
-        if not DATABASE_AVAILABLE and HAS_LIVE_WEBHOOKS:
-            metrics["data_source"] = "webhook_database_real_time"
+        if not DATABASE_AVAILABLE and len(webhook_events) > 0:
+            metrics["data_source"] = "webhook_memory_real_time"
             metrics["summary"]["total_calls"] = len(webhook_events)
             metrics["summary"]["recent_calls"] = len(webhook_events[-10:])
         
@@ -1150,7 +1225,7 @@ async def verify_carrier(request: CarrierVerificationRequest, api_key: str = Dep
                     authority_status not in ["Inactive", "", "N/A"]):
                     
                     logger.info(f"Successfully retrieved valid data from FMCSA API for MC {mc_number}")
-                    fmcsa_data["verified_at"] = datetime.now(timezone.utc).isoformat()
+                    fmcsa_data["verified_at"] = datetime.datetime.now(timezone.utc).isoformat()
                     
                     return {
                         "success": True,
@@ -1163,7 +1238,7 @@ async def verify_carrier(request: CarrierVerificationRequest, api_key: str = Dep
         logger.info(f"Using mock data for MC {mc_number}")
         if mc_number in MOCK_CARRIER_DATA:
             carrier_data = MOCK_CARRIER_DATA[mc_number].copy()
-            carrier_data["verified_at"] = datetime.now(timezone.utc).isoformat()
+            carrier_data["verified_at"] = datetime.datetime.now(timezone.utc).isoformat()
             
             return {
                 "success": True,
@@ -1328,7 +1403,7 @@ async def negotiate_rate(request: RateNegotiationRequest, api_key: str = Depends
             counter_offer = current_rate * 0.90
             response_message = f"Sorry, ${proposed_rate:.2f} is too low. Our best rate for load {request.load_id} is ${counter_offer:.2f}."
         
-        call_id = f"CALL_{request.load_id}_{int(datetime.now().timestamp())}"
+        call_id = f"CALL_{request.load_id}_{int(datetime.datetime.now().timestamp())}"
         
         # Record negotiation in database if available
         if DATABASE_AVAILABLE:
@@ -1442,267 +1517,7 @@ async def classify_call(request: CallClassificationRequest, api_key: str = Depen
         logger.error(f"Call classification error: {e}")
         raise HTTPException(status_code=500, detail="Call classification failed")
 
-# Simplified HappyRobot integration test endpoint
-@app.get("/test-happyrobot")
-async def test_happyrobot_integration(api_key: str = Depends(verify_api_key)):
-    """Test HappyRobot webhook readiness (no API calls needed)"""
-    try:
-        logger.info("🧪 Testing HappyRobot webhook readiness...")
-        
-        # Validate configuration
-        config = validate_happyrobot_config()
-        
-        # Test database connection for storing webhook data
-        db_status = "connected" if DATABASE_AVAILABLE else "mock_mode"
-        
-        # Count existing webhook calls in database
-        webhook_call_count = 0
-        if DATABASE_AVAILABLE:
-            try:
-                conn = get_db_connection()
-                cursor = conn.cursor()
-                cursor.execute("SELECT COUNT(*) FROM calls WHERE happyrobot_call_id LIKE 'WEBHOOK_%'")
-                webhook_call_count = cursor.fetchone()[0]
-                cursor.close()
-                conn.close()
-            except:
-                webhook_call_count = 0
-        
-        return {
-            "success": True,
-            "webhook_status": "ready",
-            "happyrobot_config": config,
-            "database_status": db_status,
-            "webhook_calls_received": webhook_call_count,
-            "webhook_endpoints": [
-                f"{ENVIRONMENT == 'production' and 'https://carrier-sales-kavin.fly.dev' or 'http://localhost:8000'}/verify-carrier",
-                f"{ENVIRONMENT == 'production' and 'https://carrier-sales-kavin.fly.dev' or 'http://localhost:8000'}/search-loads",
-                f"{ENVIRONMENT == 'production' and 'https://carrier-sales-kavin.fly.dev' or 'http://localhost:8000'}/negotiate-rate",
-                f"{ENVIRONMENT == 'production' and 'https://carrier-sales-kavin.fly.dev' or 'http://localhost:8000'}/extract-call-data",
-                f"{ENVIRONMENT == 'production' and 'https://carrier-sales-kavin.fly.dev' or 'http://localhost:8000'}/classify-call"
-            ],
-            "message": "Webhooks ready to receive HappyRobot calls",
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"HappyRobot webhook test error: {e}")
-        return {
-            "success": False,
-            "error": str(e),
-            "webhook_status": "error",
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-
-@app.get("/test-fmcsa/{mc_number}")
-async def test_fmcsa_api(mc_number: str, api_key: str = Depends(verify_api_key)):
-    """Test FMCSA API connectivity"""
-    if not FMCSA_API_KEY:
-        return {
-            "success": False,
-            "error": "No FMCSA API key configured",
-            "mc_number": mc_number
-        }
-    
-    try:
-        result = await query_fmcsa_api(mc_number, FMCSA_API_KEY)
-        
-        return {
-            "success": bool(result),
-            "mc_number": mc_number,
-            "fmcsa_data": result,
-            "api_key_partial": f"{FMCSA_API_KEY[:10]}...",
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"FMCSA API test error: {e}")
-        return {
-            "success": False,
-            "error": str(e),
-            "mc_number": mc_number,
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-
-# @app.post("/webhooks/happyrobot/call-completed")
-# async def happyrobot_call_completed(request: Request, background_tasks: BackgroundTasks):
-#     """Webhook endpoint for HappyRobot call completion"""
-#     try:
-#         webhook_data = await request.json()
-#         logger.info(f"🎯 Received HappyRobot call completion webhook")
-
-#         transcript = webhook_data.get("transcript", webhook_data.get("call_transcript", ""))
-#         if isinstance(transcript, list):
-#             # HappyRobot sometimes delivers an array of utterances –
-#             # collapse them into a single string for NLP & storage
-#             transcript = " ".join(str(part) for part in transcript)
-        
-#         # Extract call information
-#         call_info = {
-#             "happyrobot_call_id": webhook_data.get("call_id", f"HR_{int(datetime.now().timestamp())}"),
-#             # "call_transcript": webhook_data.get("transcript", webhook_data.get("call_transcript", "")),
-#             "call_transcript": transcript,
-#             "call_duration": webhook_data.get("duration", webhook_data.get("call_duration", 0)),
-#             "call_status": webhook_data.get("status", "completed"),
-#             "carrier_mc": None,
-#             "company_name": None,
-#             "equipment_type": None,
-#             "original_rate": None,
-#             "proposed_rate": None,
-#             "final_outcome": "inquiry_only",
-#             "sentiment": "neutral"
-#         }
-        
-#         # Extract detailed information from transcript
-#         if call_info["call_transcript"]:
-#             extracted_info = enhanced_extract_carrier_info_from_text(call_info["call_transcript"])
-#             call_info.update({
-#                 "carrier_mc": extracted_info.get("mc_number"),
-#                 "company_name": extracted_info.get("company_name"),
-#                 "equipment_type": extracted_info.get("equipment_type"),
-#                 "original_rate": extracted_info.get("original_rate"),
-#                 "proposed_rate": extracted_info.get("proposed_rate"),
-#                 "final_outcome": extracted_info.get("final_outcome", "inquiry_only")
-#             })
-#             call_info["sentiment"] = enhanced_analyze_sentiment(call_info["call_transcript"])
-        
-#         # Store in background
-#         background_tasks.add_task(store_webhook_call_data, call_info)
-        
-#         return {
-#             "success": True,
-#             "message": "Call data received and processed",
-#             "call_id": call_info["happyrobot_call_id"],
-#             "extracted_data": {
-#                 "mc_number": call_info["carrier_mc"],
-#                 "company_name": call_info["company_name"],
-#                 "equipment_type": call_info["equipment_type"],
-#                 "sentiment": call_info["sentiment"],
-#                 "outcome": call_info["final_outcome"]
-#             }
-#         }
-        
-#     except Exception as e:
-#         logger.error(f"Error processing HappyRobot webhook: {e}")
-#         return {"success": False, "error": str(e)}
-
-webhook_events: list[dict] = []
-
-# async def store_webhook_call_data(call_info: Dict):
-#     """Store webhook call data with error handling"""
-#     try:
-#         if not DATABASE_AVAILABLE:
-#             # logger.info("📊 Mock mode: Webhook call data logged but not stored")
-#             # return
-#             webhook_events.append(call_info)   # <- in-memory fallback
-#             logger.info("📊 Stored in-memory for dashboard")
-#             global HAS_LIVE_WEBHOOKS
-#             HAS_LIVE_WEBHOOKS = True             # ← flip the flag
-#             return
-        
-#         conn = get_db_connection()
-#         if not conn:
-#             logger.warning("Database connection failed, webhook data not stored")
-#             return
-            
-#         cursor = conn.cursor()
-        
-#         cursor.execute("""
-#             INSERT INTO calls 
-#             (happyrobot_call_id, carrier_mc, company_name, call_transcript, call_duration,
-#              call_outcome, sentiment, equipment_type, original_rate, proposed_rate, 
-#              final_outcome, call_status)
-#             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-#             ON DUPLICATE KEY UPDATE
-#             carrier_mc = VALUES(carrier_mc),
-#             company_name = VALUES(company_name),
-#             call_transcript = VALUES(call_transcript),
-#             call_duration = VALUES(call_duration),
-#             call_outcome = VALUES(call_outcome),
-#             sentiment = VALUES(sentiment),
-#             equipment_type = VALUES(equipment_type),
-#             original_rate = VALUES(original_rate),
-#             proposed_rate = VALUES(proposed_rate),
-#             final_outcome = VALUES(final_outcome),
-#             call_status = VALUES(call_status),
-#             updated_at = CURRENT_TIMESTAMP
-#         """, (
-#             call_info.get("happyrobot_call_id"),
-#             call_info.get("carrier_mc"),
-#             call_info.get("company_name"),
-#             call_info.get("call_transcript", ""),
-#             call_info.get("call_duration", 0),
-#             call_info.get("final_outcome", "inquiry_only"),
-#             call_info.get("sentiment", "neutral"),
-#             call_info.get("equipment_type"),
-#             call_info.get("original_rate"),
-#             call_info.get("proposed_rate"),
-#             call_info.get("final_outcome", "inquiry_only"),
-#             call_info.get("call_status", "completed")
-#         ))
-        
-#         conn.commit()
-#         cursor.close()
-#         conn.close()
-#         logger.info(f"✅ Webhook call data stored: {call_info.get('happyrobot_call_id')}")
-        
-#     except Exception as e:
-#         logger.error(f"Error storing webhook call data: {e}")
-
-# ── globals ───────────────────────────────────────────────────────────────
-from typing import Dict, List, Optional
-from fastapi import BackgroundTasks, Depends, Request
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.dialects.mysql import insert as mysql_insert
-from datetime import datetime
-import logging
-
-logger = logging.getLogger(__name__)
-
-webhook_events: List[Dict] = []   # in-memory fallback store
-
-
-# ── helper ────────────────────────────────────────────────────────────────
-async def store_webhook_call_data(
-    call_info: Dict,
-    db: Optional[AsyncSession] = None,          # db is optional → enables fallback
-) -> None:
-    """
-    Persist a HappyRobot webhook record.
-    • If `db` is provided  → upsert into MySQL.
-    • If `db` is None      → append to `webhook_events` in memory.
-    """
-    if db is None:
-        webhook_events.append(call_info)
-        logger.info("📊 Stored in-memory (%d total)", len(webhook_events))
-        return
-
-    stmt = mysql_insert(CallRecord).values(call_info)
-    # Build ON DUPLICATE KEY UPDATE for every column except PK & created_at
-    update_cols = {
-        col.name: stmt.inserted[col.name]
-        for col in CallRecord.__table__.c
-        if col.name not in ("happyrobot_call_id", "created_at")
-    }
-    stmt = stmt.on_duplicate_key_update(**update_cols)
-
-    try:
-        await db.execute(stmt)
-        await db.commit()
-        logger.info("✅ Stored %s in MySQL", call_info["happyrobot_call_id"])
-    except Exception as e:
-        await db.rollback()
-        logger.error("❌ MySQL error, falling back to memory: %s", e)
-        webhook_events.append(call_info)
-
-
-# ── public getter (optional) ──────────────────────────────────────────────
-def get_in_memory_events(limit: int = 50) -> List[Dict]:
-    """Return the most-recent `limit` events kept only in RAM."""
-    return webhook_events[-limit:][::-1]
-
-
-# ── FastAPI route ─────────────────────────────────────────────────────────
+# ── FastAPI webhook route ─────────────────────────────────────────────────────────────
 @app.post("/webhooks/happyrobot/call-completed")
 async def happyrobot_call_completed(
     request: Request,
@@ -1725,7 +1540,7 @@ async def happyrobot_call_completed(
         # 2. Build base dict
         call_info = {
             "happyrobot_call_id": payload.get(
-                "call_id", f"HR_{int(datetime.utcnow().timestamp())}"
+                "call_id", f"HR_{int(datetime.datetime.utcnow().timestamp())}"
             ),
             "call_transcript": transcript_raw,
             "call_duration": payload.get("duration", payload.get("call_duration", 0)),
@@ -1761,9 +1576,6 @@ async def happyrobot_call_completed(
         # —— A) direct await (preferred — it's already async) ————————
         await store_webhook_call_data(call_info, db)
 
-        # —— B) or launch background task — uncomment if desired ————
-        # background_tasks.add_task(store_webhook_call_data, call_info, db)
-
         # 5. API response
         return {
             "success": True,
@@ -1782,6 +1594,89 @@ async def happyrobot_call_completed(
         logger.error("Webhook processing error: %s", e)
         return {"success": False, "error": str(e)}
 
+# Simplified HappyRobot integration test endpoint
+@app.get("/test-happyrobot")
+async def test_happyrobot_integration(api_key: str = Depends(verify_api_key)):
+    """Test HappyRobot webhook readiness (no API calls needed)"""
+    try:
+        logger.info("🧪 Testing HappyRobot webhook readiness...")
+        
+        # Validate configuration
+        config = validate_happyrobot_config()
+        
+        # Test database connection for storing webhook data
+        db_status = "connected" if DATABASE_AVAILABLE else "mock_mode"
+        
+        # Count existing webhook calls in database
+        webhook_call_count = 0
+        if DATABASE_AVAILABLE:
+            try:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute("SELECT COUNT(*) FROM calls WHERE happyrobot_call_id LIKE 'HR_%'")
+                webhook_call_count = cursor.fetchone()[0]
+                cursor.close()
+                conn.close()
+            except:
+                webhook_call_count = 0
+        else:
+            webhook_call_count = len(webhook_events)
+        
+        return {
+            "success": True,
+            "webhook_status": "ready",
+            "happyrobot_config": config,
+            "database_status": db_status,
+            "webhook_calls_received": webhook_call_count,
+            "webhook_endpoints": [
+                f"{ENVIRONMENT == 'production' and 'https://carrier-sales-kavin.fly.dev' or 'http://localhost:8000'}/verify-carrier",
+                f"{ENVIRONMENT == 'production' and 'https://carrier-sales-kavin.fly.dev' or 'http://localhost:8000'}/search-loads",
+                f"{ENVIRONMENT == 'production' and 'https://carrier-sales-kavin.fly.dev' or 'http://localhost:8000'}/negotiate-rate",
+                f"{ENVIRONMENT == 'production' and 'https://carrier-sales-kavin.fly.dev' or 'http://localhost:8000'}/extract-call-data",
+                f"{ENVIRONMENT == 'production' and 'https://carrier-sales-kavin.fly.dev' or 'http://localhost:8000'}/classify-call"
+            ],
+            "message": "Webhooks ready to receive HappyRobot calls",
+            "timestamp": datetime.datetime.now(timezone.utc).isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"HappyRobot webhook test error: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "webhook_status": "error",
+            "timestamp": datetime.datetime.now(timezone.utc).isoformat()
+        }
+
+@app.get("/test-fmcsa/{mc_number}")
+async def test_fmcsa_api(mc_number: str, api_key: str = Depends(verify_api_key)):
+    """Test FMCSA API connectivity"""
+    if not FMCSA_API_KEY:
+        return {
+            "success": False,
+            "error": "No FMCSA API key configured",
+            "mc_number": mc_number
+        }
+    
+    try:
+        result = await query_fmcsa_api(mc_number, FMCSA_API_KEY)
+        
+        return {
+            "success": bool(result),
+            "mc_number": mc_number,
+            "fmcsa_data": result,
+            "api_key_partial": f"{FMCSA_API_KEY[:10]}...",
+            "timestamp": datetime.datetime.now(timezone.utc).isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"FMCSA API test error: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "mc_number": mc_number,
+            "timestamp": datetime.datetime.now(timezone.utc).isoformat()
+        }
 
 @app.get("/webhooks/debug")
 async def webhook_debug_info():
@@ -1825,6 +1720,11 @@ async def webhook_debug_info():
                 conn.close()
             except Exception as db_error:
                 logger.error(f"Database query error: {db_error}")
+        else:
+            webhook_count = len(webhook_events)
+            recent_webhooks = [{"happyrobot_call_id": e["happyrobot_call_id"], 
+                               "final_outcome": e["final_outcome"], 
+                               "created_at": datetime.datetime.now()} for e in webhook_events[-10:]]
         
         return {
             "webhook_endpoints": webhook_urls,
@@ -1893,7 +1793,7 @@ async def get_dashboard_activity():
             return {"success": True,
                     "activity": [
                         {"id": e["happyrobot_call_id"],
-                        "timestamp": datetime.utcnow().isoformat(),
+                        "timestamp": datetime.datetime.utcnow().isoformat(),
                         "carrier": e.get("company_name") or "Unknown",
                         "outcome": e["final_outcome"],
                         "sentiment": e["sentiment"],
