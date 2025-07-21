@@ -641,10 +641,186 @@ async def store_call_data_in_database(call_data: Dict):
 # Global variables for in-memory webhook storage
 webhook_events: List[Dict] = []   # in-memory fallback store
 
+# async def get_real_time_metrics():
+#     """Get real-time metrics from webhook data stored in database - FIXED VERSION"""
+#     if not DATABASE_AVAILABLE:
+#         return await get_enhanced_fallback_metrics()
+    
+#     try:
+#         conn = get_db_connection()
+#         cursor = conn.cursor(dictionary=True)
+        
+#         # Get date ranges
+#         today = datetime.datetime.now().date()
+#         week_ago = today - timedelta(days=7)
+        
+#         # Count total webhook calls (both database and in-memory)
+#         cursor.execute("SELECT COUNT(*) as total FROM calls WHERE created_at >= %s", (week_ago,))
+#         db_calls = cursor.fetchone()['total']
+#         total_calls = db_calls + len(webhook_events)  # Include in-memory calls
+        
+#         # Recent calls (last 7 days)  
+#         cursor.execute("SELECT COUNT(*) as recent FROM calls WHERE DATE(created_at) >= %s", (week_ago,))
+#         db_recent = cursor.fetchone()['recent']
+#         recent_calls = db_recent + len([e for e in webhook_events if 'created_at' not in e or (datetime.datetime.now() - datetime.datetime.now()).days < 7])
+        
+#         # Conversion rate (booked calls)
+#         cursor.execute("SELECT COUNT(*) as booked FROM calls WHERE call_outcome = 'load_booked' AND created_at >= %s", (week_ago,))
+#         booked_calls = cursor.fetchone()['booked']
+#         # Add in-memory booked calls
+#         memory_booked = len([e for e in webhook_events if e.get('final_outcome') == 'transferred to sales'])
+#         total_booked = booked_calls + memory_booked
+        
+#         conversion_rate = (total_booked / total_calls * 100) if total_calls > 0 else 0
+        
+#         # Average negotiated rate from webhook data
+#         cursor.execute("SELECT AVG(proposed_rate) as avg_rate FROM calls WHERE proposed_rate > 0 AND created_at >= %s", (week_ago,))
+#         avg_rate_result = cursor.fetchone()
+#         avg_rate = avg_rate_result['avg_rate'] if avg_rate_result['avg_rate'] else 0
+        
+#         # Add in-memory rates
+#         memory_rates = [e.get('proposed_rate', 0) for e in webhook_events if e.get('proposed_rate', 0) > 0]
+#         if memory_rates:
+#             all_rates = ([avg_rate] if avg_rate else []) + memory_rates
+#             avg_rate = sum(all_rates) / len(all_rates)
+        
+#         if avg_rate == 0:
+#             avg_rate = 2650  # Default fallback
+        
+#         # Determine data source based on actual webhook activity
+#         data_source = "enhanced_mock_data"  # Default
+#         if total_calls > 0:
+#             if db_calls > 0:
+#                 data_source = "webhook_database_real_time"
+#             elif len(webhook_events) > 0:
+#                 data_source = "webhook_memory_real_time" 
+        
+#         # Build classifications from both sources
+#         cursor.execute("""
+#             SELECT call_outcome as type, COUNT(*) as count 
+#             FROM calls 
+#             WHERE call_outcome IS NOT NULL AND created_at >= %s 
+#             GROUP BY call_outcome
+#         """, (week_ago,))
+#         db_classifications = {row['type']: row['count'] for row in cursor.fetchall()}
+        
+#         # Add in-memory classifications
+#         memory_classifications = {}
+#         for event in webhook_events:
+#             outcome = event.get('final_outcome', 'inquiry_only')
+#             memory_classifications[outcome] = memory_classifications.get(outcome, 0) + 1
+        
+#         # Merge classifications
+#         all_classifications = {}
+#         for outcome in set(list(db_classifications.keys()) + list(memory_classifications.keys())):
+#             all_classifications[outcome] = db_classifications.get(outcome, 0) + memory_classifications.get(outcome, 0)
+        
+#         classifications = [{"type": k, "count": v} for k, v in all_classifications.items()]
+        
+#         if not classifications:
+#             classifications = [
+#                 {"type": "inquiry_only", "count": max(1, int(total_calls * 0.5))},
+#                 {"type": "negotiation", "count": max(1, int(total_calls * 0.3))},
+#                 {"type": "load_booked", "count": max(1, int(total_calls * 0.15))},
+#                 {"type": "not_interested", "count": max(0, int(total_calls * 0.05))}
+#             ]
+        
+#         # Build sentiments similarly
+#         cursor.execute("""
+#             SELECT sentiment as type, COUNT(*) as count 
+#             FROM calls 
+#             WHERE sentiment IS NOT NULL AND created_at >= %s 
+#             GROUP BY sentiment
+#         """, (week_ago,))
+#         db_sentiments = {row['type']: row['count'] for row in cursor.fetchall()}
+        
+#         memory_sentiments = {}
+#         for event in webhook_events:
+#             sentiment = event.get('sentiment', 'neutral')
+#             memory_sentiments[sentiment] = memory_sentiments.get(sentiment, 0) + 1
+        
+#         all_sentiments = {}
+#         for sentiment in set(list(db_sentiments.keys()) + list(memory_sentiments.keys())):
+#             all_sentiments[sentiment] = db_sentiments.get(sentiment, 0) + memory_sentiments.get(sentiment, 0)
+            
+#         sentiments = [{"type": k, "count": v} for k, v in all_sentiments.items()]
+        
+#         if not sentiments:
+#             sentiments = [
+#                 {"type": "positive", "count": max(1, int(total_calls * 0.6))},
+#                 {"type": "neutral", "count": max(1, int(total_calls * 0.3))},
+#                 {"type": "negative", "count": max(0, int(total_calls * 0.1))}
+#             ]
+        
+#         # Equipment performance
+#         cursor.execute("""
+#             SELECT equipment_type as type, COUNT(*) as calls 
+#             FROM calls 
+#             WHERE equipment_type IS NOT NULL AND created_at >= %s 
+#             GROUP BY equipment_type
+#         """, (week_ago,))
+#         db_equipment = {row['type']: row['calls'] for row in cursor.fetchall()}
+        
+#         memory_equipment = {}
+#         for event in webhook_events:
+#             equipment = event.get('equipment_type')
+#             if equipment:
+#                 memory_equipment[equipment] = memory_equipment.get(equipment, 0) + 1
+        
+#         all_equipment = {}
+#         for equip in set(list(db_equipment.keys()) + list(memory_equipment.keys())):
+#             all_equipment[equip] = db_equipment.get(equip, 0) + memory_equipment.get(equip, 0)
+            
+#         equipment_performance = [{"type": k, "calls": v} for k, v in all_equipment.items()]
+        
+#         if not equipment_performance:
+#             equipment_performance = [
+#                 {"type": "Dry Van", "calls": max(1, int(total_calls * 0.4))},
+#                 {"type": "Flatbed", "calls": max(1, int(total_calls * 0.3))},
+#                 {"type": "Refrigerated", "calls": max(1, int(total_calls * 0.2))},
+#                 {"type": "Step Deck", "calls": max(0, int(total_calls * 0.1))}
+#             ]
+        
+#         cursor.close()
+#         conn.close()
+        
+#         metrics = {
+#             "summary": {
+#                 "total_calls": total_calls,
+#                 "recent_calls": recent_calls,
+#                 "conversion_rate": round(conversion_rate, 1),
+#                 "average_negotiated_rate": int(avg_rate)
+#             },
+#             "classifications": classifications,
+#             "sentiments": sentiments,
+#             "equipment_performance": equipment_performance,
+#             "recent_activity": [],
+#             "updated_at": datetime.datetime.now(timezone.utc).isoformat(),
+#             "data_source": data_source
+#         }
+        
+#         return metrics
+        
+#     except Exception as e:
+#         logger.error(f"Error calculating real-time metrics: {e}")
+#         return await get_enhanced_fallback_metrics()
+
+# Replace your get_real_time_metrics function in main.py with this fixed version
+
+# EXACT REPLACEMENT: Find and replace your get_real_time_metrics() function with this
+
 async def get_real_time_metrics():
-    """Get real-time metrics from webhook data stored in database - FIXED VERSION"""
+    """FIXED: Get real-time metrics - ONLY count webhook calls, not all database calls"""
+    
+    # Count in-memory webhook events
+    memory_webhook_count = len(webhook_events)
+    
     if not DATABASE_AVAILABLE:
-        return await get_enhanced_fallback_metrics()
+        if memory_webhook_count > 0:
+            # Use in-memory webhook data
+            return await get_webhook_metrics_from_memory()
+        else:
+            return await get_enhanced_fallback_metrics()
     
     try:
         conn = get_db_connection()
@@ -654,31 +830,76 @@ async def get_real_time_metrics():
         today = datetime.datetime.now().date()
         week_ago = today - timedelta(days=7)
         
-        # Count total webhook calls (both database and in-memory)
-        cursor.execute("SELECT COUNT(*) as total FROM calls WHERE created_at >= %s", (week_ago,))
-        db_calls = cursor.fetchone()['total']
-        total_calls = db_calls + len(webhook_events)  # Include in-memory calls
+        # FIXED: Only count webhook calls (not all database calls)
+        cursor.execute("""
+            SELECT COUNT(*) as count FROM calls 
+            WHERE (happyrobot_call_id LIKE 'HR_%' 
+                OR happyrobot_call_id LIKE 'TEST_%' 
+                OR happyrobot_call_id LIKE 'WEBHOOK_%'
+                OR happyrobot_call_id LIKE 'DEBUG_%')
+            AND created_at >= %s
+        """, (week_ago,))
+        result = cursor.fetchone()
+        db_webhook_count = result['count'] if result else 0
         
-        # Recent calls (last 7 days)  
-        cursor.execute("SELECT COUNT(*) as recent FROM calls WHERE DATE(created_at) >= %s", (week_ago,))
-        db_recent = cursor.fetchone()['recent']
-        recent_calls = db_recent + len([e for e in webhook_events if 'created_at' not in e or (datetime.datetime.now() - datetime.datetime.now()).days < 7])
+        # Total webhook calls = database + memory
+        total_webhook_calls = db_webhook_count + memory_webhook_count
         
-        # Conversion rate (booked calls)
-        cursor.execute("SELECT COUNT(*) as booked FROM calls WHERE call_outcome = 'load_booked' AND created_at >= %s", (week_ago,))
-        booked_calls = cursor.fetchone()['booked']
-        # Add in-memory booked calls
-        memory_booked = len([e for e in webhook_events if e.get('final_outcome') == 'transferred to sales'])
-        total_booked = booked_calls + memory_booked
+        logger.info(f"📊 Webhook count: DB={db_webhook_count}, Memory={memory_webhook_count}, Total={total_webhook_calls}")
         
-        conversion_rate = (total_booked / total_calls * 100) if total_calls > 0 else 0
+        # If no webhook calls at all, return mock data
+        if total_webhook_calls == 0:
+            logger.info("No webhook calls found, using mock data")
+            return await get_enhanced_fallback_metrics()
         
-        # Average negotiated rate from webhook data
-        cursor.execute("SELECT AVG(proposed_rate) as avg_rate FROM calls WHERE proposed_rate > 0 AND created_at >= %s", (week_ago,))
-        avg_rate_result = cursor.fetchone()
-        avg_rate = avg_rate_result['avg_rate'] if avg_rate_result['avg_rate'] else 0
+        # Recent webhook calls (last 7 days)
+        cursor.execute("""
+            SELECT COUNT(*) as count FROM calls 
+            WHERE (happyrobot_call_id LIKE 'HR_%' 
+                OR happyrobot_call_id LIKE 'TEST_%' 
+                OR happyrobot_call_id LIKE 'WEBHOOK_%'
+                OR happyrobot_call_id LIKE 'DEBUG_%')
+            AND DATE(created_at) >= %s
+        """, (week_ago,))
+        result = cursor.fetchone()
+        db_recent_webhook_calls = result['count'] if result else 0
+        recent_webhook_calls = db_recent_webhook_calls + memory_webhook_count
         
-        # Add in-memory rates
+        # Conversion rate (booked webhook calls only)
+        cursor.execute("""
+            SELECT COUNT(*) as count FROM calls 
+            WHERE (call_outcome = 'load_booked' 
+                OR call_outcome = 'transferred to sales'
+                OR final_outcome = 'transferred to sales')
+            AND (happyrobot_call_id LIKE 'HR_%' 
+                OR happyrobot_call_id LIKE 'TEST_%' 
+                OR happyrobot_call_id LIKE 'WEBHOOK_%'
+                OR happyrobot_call_id LIKE 'DEBUG_%')
+            AND created_at >= %s
+        """, (week_ago,))
+        result = cursor.fetchone()
+        db_booked_webhook_calls = result['count'] if result else 0
+        
+        # Add in-memory booked webhook calls
+        memory_booked = len([e for e in webhook_events if e.get('final_outcome') in ['transferred to sales', 'load_booked']])
+        total_booked_webhook_calls = db_booked_webhook_calls + memory_booked
+        
+        conversion_rate = (total_booked_webhook_calls / total_webhook_calls * 100) if total_webhook_calls > 0 else 0
+        
+        # Average negotiated rate from webhook calls only
+        cursor.execute("""
+            SELECT AVG(proposed_rate) as avg_rate FROM calls 
+            WHERE proposed_rate > 0 
+            AND (happyrobot_call_id LIKE 'HR_%' 
+                OR happyrobot_call_id LIKE 'TEST_%' 
+                OR happyrobot_call_id LIKE 'WEBHOOK_%'
+                OR happyrobot_call_id LIKE 'DEBUG_%')
+            AND created_at >= %s
+        """, (week_ago,))
+        result = cursor.fetchone()
+        avg_rate = result['avg_rate'] if result and result['avg_rate'] else 0
+        
+        # Add in-memory webhook rates
         memory_rates = [e.get('proposed_rate', 0) for e in webhook_events if e.get('proposed_rate', 0) > 0]
         if memory_rates:
             all_rates = ([avg_rate] if avg_rate else []) + memory_rates
@@ -687,20 +908,26 @@ async def get_real_time_metrics():
         if avg_rate == 0:
             avg_rate = 2650  # Default fallback
         
-        # Determine data source based on actual webhook activity
+        # FIXED: Data source determination based on webhook calls only
         data_source = "enhanced_mock_data"  # Default
-        if total_calls > 0:
-            if db_calls > 0:
+        if total_webhook_calls > 0:
+            if db_webhook_count > 0:
                 data_source = "webhook_database_real_time"
-            elif len(webhook_events) > 0:
-                data_source = "webhook_memory_real_time" 
+            elif memory_webhook_count > 0:
+                data_source = "webhook_memory_real_time"
         
-        # Build classifications from both sources
+        # Classifications from webhook calls only
         cursor.execute("""
-            SELECT call_outcome as type, COUNT(*) as count 
+            SELECT 
+                COALESCE(call_outcome, final_outcome, 'inquiry_only') as type, 
+                COUNT(*) as count 
             FROM calls 
-            WHERE call_outcome IS NOT NULL AND created_at >= %s 
-            GROUP BY call_outcome
+            WHERE (happyrobot_call_id LIKE 'HR_%' 
+                OR happyrobot_call_id LIKE 'TEST_%' 
+                OR happyrobot_call_id LIKE 'WEBHOOK_%'
+                OR happyrobot_call_id LIKE 'DEBUG_%')
+            AND created_at >= %s
+            GROUP BY COALESCE(call_outcome, final_outcome, 'inquiry_only')
         """, (week_ago,))
         db_classifications = {row['type']: row['count'] for row in cursor.fetchall()}
         
@@ -712,24 +939,22 @@ async def get_real_time_metrics():
         
         # Merge classifications
         all_classifications = {}
-        for outcome in set(list(db_classifications.keys()) + list(memory_classifications.keys())):
+        all_outcomes = set(list(db_classifications.keys()) + list(memory_classifications.keys()))
+        for outcome in all_outcomes:
             all_classifications[outcome] = db_classifications.get(outcome, 0) + memory_classifications.get(outcome, 0)
         
         classifications = [{"type": k, "count": v} for k, v in all_classifications.items()]
         
-        if not classifications:
-            classifications = [
-                {"type": "inquiry_only", "count": max(1, int(total_calls * 0.5))},
-                {"type": "negotiation", "count": max(1, int(total_calls * 0.3))},
-                {"type": "load_booked", "count": max(1, int(total_calls * 0.15))},
-                {"type": "not_interested", "count": max(0, int(total_calls * 0.05))}
-            ]
-        
-        # Build sentiments similarly
+        # Sentiments from webhook calls only
         cursor.execute("""
             SELECT sentiment as type, COUNT(*) as count 
             FROM calls 
-            WHERE sentiment IS NOT NULL AND created_at >= %s 
+            WHERE sentiment IS NOT NULL 
+            AND (happyrobot_call_id LIKE 'HR_%' 
+                OR happyrobot_call_id LIKE 'TEST_%' 
+                OR happyrobot_call_id LIKE 'WEBHOOK_%'
+                OR happyrobot_call_id LIKE 'DEBUG_%')
+            AND created_at >= %s
             GROUP BY sentiment
         """, (week_ago,))
         db_sentiments = {row['type']: row['count'] for row in cursor.fetchall()}
@@ -740,23 +965,22 @@ async def get_real_time_metrics():
             memory_sentiments[sentiment] = memory_sentiments.get(sentiment, 0) + 1
         
         all_sentiments = {}
-        for sentiment in set(list(db_sentiments.keys()) + list(memory_sentiments.keys())):
+        all_sentiment_types = set(list(db_sentiments.keys()) + list(memory_sentiments.keys()))
+        for sentiment in all_sentiment_types:
             all_sentiments[sentiment] = db_sentiments.get(sentiment, 0) + memory_sentiments.get(sentiment, 0)
             
         sentiments = [{"type": k, "count": v} for k, v in all_sentiments.items()]
         
-        if not sentiments:
-            sentiments = [
-                {"type": "positive", "count": max(1, int(total_calls * 0.6))},
-                {"type": "neutral", "count": max(1, int(total_calls * 0.3))},
-                {"type": "negative", "count": max(0, int(total_calls * 0.1))}
-            ]
-        
-        # Equipment performance
+        # Equipment from webhook calls only
         cursor.execute("""
             SELECT equipment_type as type, COUNT(*) as calls 
             FROM calls 
-            WHERE equipment_type IS NOT NULL AND created_at >= %s 
+            WHERE equipment_type IS NOT NULL 
+            AND (happyrobot_call_id LIKE 'HR_%' 
+                OR happyrobot_call_id LIKE 'TEST_%' 
+                OR happyrobot_call_id LIKE 'WEBHOOK_%'
+                OR happyrobot_call_id LIKE 'DEBUG_%')
+            AND created_at >= %s
             GROUP BY equipment_type
         """, (week_ago,))
         db_equipment = {row['type']: row['calls'] for row in cursor.fetchall()}
@@ -768,26 +992,41 @@ async def get_real_time_metrics():
                 memory_equipment[equipment] = memory_equipment.get(equipment, 0) + 1
         
         all_equipment = {}
-        for equip in set(list(db_equipment.keys()) + list(memory_equipment.keys())):
+        all_equipment_types = set(list(db_equipment.keys()) + list(memory_equipment.keys()))
+        for equip in all_equipment_types:
             all_equipment[equip] = db_equipment.get(equip, 0) + memory_equipment.get(equip, 0)
             
         equipment_performance = [{"type": k, "calls": v} for k, v in all_equipment.items()]
         
-        if not equipment_performance:
-            equipment_performance = [
-                {"type": "Dry Van", "calls": max(1, int(total_calls * 0.4))},
-                {"type": "Flatbed", "calls": max(1, int(total_calls * 0.3))},
-                {"type": "Refrigerated", "calls": max(1, int(total_calls * 0.2))},
-                {"type": "Step Deck", "calls": max(0, int(total_calls * 0.1))}
-            ]
-        
         cursor.close()
         conn.close()
         
+        # Use minimal fallback data if categories are empty
+        if not classifications:
+            classifications = [
+                {"type": "inquiry_only", "count": max(1, int(total_webhook_calls * 0.5))},
+                {"type": "negotiation", "count": max(1, int(total_webhook_calls * 0.3))},
+                {"type": "load_booked", "count": max(0, int(total_webhook_calls * 0.2))}
+            ]
+        
+        if not sentiments:
+            sentiments = [
+                {"type": "positive", "count": max(1, int(total_webhook_calls * 0.6))},
+                {"type": "neutral", "count": max(1, int(total_webhook_calls * 0.3))},
+                {"type": "negative", "count": max(0, int(total_webhook_calls * 0.1))}
+            ]
+        
+        if not equipment_performance:
+            equipment_performance = [
+                {"type": "Dry Van", "calls": max(1, int(total_webhook_calls * 0.5))},
+                {"type": "Flatbed", "calls": max(0, int(total_webhook_calls * 0.3))},
+                {"type": "Other", "calls": max(0, int(total_webhook_calls * 0.2))}
+            ]
+        
         metrics = {
             "summary": {
-                "total_calls": total_calls,
-                "recent_calls": recent_calls,
+                "total_calls": total_webhook_calls,
+                "recent_calls": recent_webhook_calls,
                 "conversion_rate": round(conversion_rate, 1),
                 "average_negotiated_rate": int(avg_rate)
             },
@@ -799,11 +1038,65 @@ async def get_real_time_metrics():
             "data_source": data_source
         }
         
+        logger.info(f"✅ Webhook metrics: {total_webhook_calls} calls, source: {data_source}")
         return metrics
         
     except Exception as e:
-        logger.error(f"Error calculating real-time metrics: {e}")
+        logger.error(f"Error calculating webhook metrics: {e}")
+        if memory_webhook_count > 0:
+            return await get_webhook_metrics_from_memory()
         return await get_enhanced_fallback_metrics()
+
+async def get_webhook_metrics_from_memory():
+    """Get metrics from in-memory webhook events only"""
+    memory_webhook_count = len(webhook_events)
+    
+    if memory_webhook_count == 0:
+        return await get_enhanced_fallback_metrics()
+    
+    # Calculate metrics from in-memory webhook data only
+    memory_booked = len([e for e in webhook_events if e.get('final_outcome') in ['transferred to sales', 'load_booked']])
+    conversion_rate = (memory_booked / memory_webhook_count * 100) if memory_webhook_count > 0 else 0
+    
+    memory_rates = [e.get('proposed_rate', 0) for e in webhook_events if e.get('proposed_rate', 0) > 0]
+    avg_rate = sum(memory_rates) / len(memory_rates) if memory_rates else 2650
+    
+    # Classifications from memory
+    memory_classifications = {}
+    for event in webhook_events:
+        outcome = event.get('final_outcome', 'inquiry_only')
+        memory_classifications[outcome] = memory_classifications.get(outcome, 0) + 1
+    classifications = [{"type": k, "count": v} for k, v in memory_classifications.items()]
+    
+    # Sentiments from memory
+    memory_sentiments = {}
+    for event in webhook_events:
+        sentiment = event.get('sentiment', 'neutral')
+        memory_sentiments[sentiment] = memory_sentiments.get(sentiment, 0) + 1
+    sentiments = [{"type": k, "count": v} for k, v in memory_sentiments.items()]
+    
+    # Equipment from memory
+    memory_equipment = {}
+    for event in webhook_events:
+        equipment = event.get('equipment_type')
+        if equipment:
+            memory_equipment[equipment] = memory_equipment.get(equipment, 0) + 1
+    equipment_performance = [{"type": k, "calls": v} for k, v in memory_equipment.items()]
+    
+    return {
+        "summary": {
+            "total_calls": memory_webhook_count,
+            "recent_calls": memory_webhook_count,
+            "conversion_rate": round(conversion_rate, 1),
+            "average_negotiated_rate": int(avg_rate)
+        },
+        "classifications": classifications,
+        "sentiments": sentiments,
+        "equipment_performance": equipment_performance,
+        "recent_activity": [],
+        "updated_at": datetime.datetime.now(timezone.utc).isoformat(),
+        "data_source": "webhook_memory_real_time"
+    }
 
 async def get_enhanced_fallback_metrics():
     """Enhanced fallback metrics with realistic data"""
