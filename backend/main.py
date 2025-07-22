@@ -405,41 +405,102 @@ def extract_load_ids(text: str) -> List[str]:
     
     return list(set(load_ids))  # Remove duplicates
 
+# def extract_rates(text: str) -> Dict[str, Optional[float]]:
+#     """Extract rates from text"""
+#     if not text:
+#         return {"original_rate": None, "proposed_rate": None}
+    
+#     # Look for rate patterns
+#     rate_patterns = [
+#         r'\$(\d{1,2}[,.]?\d{3,4})',  # $2500, $2,500
+#         r'(\d{1,2}[,.]?\d{3,4})\s*(?:dollars?|bucks?)',
+#         r'rate\s*(?:of\s*)?(\d{1,2}[,.]?\d{3,4})',
+#         r'(\d{1,2}[,.]?\d{3,4})\s*(?:for|rate)'
+#     ]
+    
+#     rates = []
+#     for pattern in rate_patterns:
+#         matches = re.findall(pattern, text.lower())
+#         for match in matches:
+#             try:
+#                 # Clean the rate string and convert to float
+#                 clean_rate = match.replace(',', '')
+#                 rate = float(clean_rate)
+#                 if 500 <= rate <= 10000:  # Reasonable rate range
+#                     rates.append(rate)
+#             except ValueError:
+#                 continue
+    
+#     rates = list(set(rates))  # Remove duplicates
+#     rates.sort()
+    
+#     result = {"original_rate": None, "proposed_rate": None}
+#     if len(rates) >= 2:
+#         result["original_rate"] = rates[-1]  # Highest rate (usually original)
+#         result["proposed_rate"] = rates[-2]  # Second highest
+#     elif len(rates) == 1:
+#         result["proposed_rate"] = rates[0]
+    
+#     return result
+
 def extract_rates(text: str) -> Dict[str, Optional[float]]:
-    """Extract rates from text"""
+    """FIXED: Enhanced rate extraction from text with better patterns"""
     if not text:
         return {"original_rate": None, "proposed_rate": None}
     
-    # Look for rate patterns
+    # More comprehensive rate patterns
     rate_patterns = [
-        r'\$(\d{1,2}[,.]?\d{3,4})',  # $2500, $2,500
-        r'(\d{1,2}[,.]?\d{3,4})\s*(?:dollars?|bucks?)',
-        r'rate\s*(?:of\s*)?(\d{1,2}[,.]?\d{3,4})',
-        r'(\d{1,2}[,.]?\d{3,4})\s*(?:for|rate)'
+        r'\$(\d{1,2},?\d{3,4})',  # $2500, $2,500
+        r'(\d{1,2},?\d{3,4})\s*(?:dollars?|bucks?|per\s*load)',
+        r'(?:rate|price|offer|pay|paying)\s*(?:of\s*|is\s*|at\s*)?\$?(\d{1,2},?\d{3,4})',
+        r'(\d{1,2},?\d{3,4})\s*(?:for\s*(?:this\s*)?(?:load|haul|trip))',
+        r'(?:can\s*(?:you\s*)?(?:do|pay|offer))\s*\$?(\d{1,2},?\d{3,4})',
+        r'(?:how\s*about|what\s*about)\s*\$?(\d{1,2},?\d{3,4})',
+        r'(?:i\s*(?:can|will)\s*(?:do|pay|take))\s*\$?(\d{1,2},?\d{3,4})',
+        r'(\d{1,2},?\d{3,4})\s*(?:sound|work|good)'
     ]
     
     rates = []
+    text_lower = text.lower()
+    
     for pattern in rate_patterns:
-        matches = re.findall(pattern, text.lower())
+        matches = re.findall(pattern, text_lower)
         for match in matches:
             try:
                 # Clean the rate string and convert to float
                 clean_rate = match.replace(',', '')
                 rate = float(clean_rate)
-                if 500 <= rate <= 10000:  # Reasonable rate range
+                if 500 <= rate <= 15000:  # Reasonable rate range (expanded)
                     rates.append(rate)
-            except ValueError:
+            except (ValueError, TypeError):
                 continue
     
-    rates = list(set(rates))  # Remove duplicates
-    rates.sort()
+    # Remove duplicates and sort
+    rates = sorted(list(set(rates)))
     
     result = {"original_rate": None, "proposed_rate": None}
+    
+    # Strategy: Look for context clues to determine which rate is which
     if len(rates) >= 2:
-        result["original_rate"] = rates[-1]  # Highest rate (usually original)
-        result["proposed_rate"] = rates[-2]  # Second highest
+        # If multiple rates, try to determine which is original vs proposed
+        # Look for context words around each rate
+        high_rate = max(rates)
+        low_rate = min(rates)
+        
+        # Check if there are indicators of negotiation
+        if any(word in text_lower for word in ['counter', 'how about', 'can you do', 'negotiate']):
+            result["original_rate"] = high_rate  # Original (higher) rate
+            result["proposed_rate"] = low_rate   # Proposed (lower) rate
+        else:
+            result["original_rate"] = rates[-1]  # Last mentioned
+            result["proposed_rate"] = rates[-2]  # Second to last
     elif len(rates) == 1:
-        result["proposed_rate"] = rates[0]
+        # Single rate - determine if it's original or proposed based on context
+        rate = rates[0]
+        if any(word in text_lower for word in ['offering', 'posted', 'loadboard', 'paying']):
+            result["original_rate"] = rate
+        else:
+            result["proposed_rate"] = rate
     
     return result
 
@@ -1871,7 +1932,198 @@ async def classify_call(request: CallClassificationRequest, api_key: str = Depen
         logger.error(f"Call classification error: {e}")
         raise HTTPException(status_code=500, detail="Call classification failed")
 
+async def validate_and_negotiate_rates(extracted_info: Dict, db: Optional[AsyncSession] = None) -> Dict:
+    """
+    FIXED: Actually validate proposed rates against load rates and perform negotiation
+    """
+    result = {
+        "negotiation_performed": False,
+        "negotiation_result": None,
+        "rates_validated": False,
+        "load_found": False
+    }
+    
+    # Check if we have both a load ID and proposed rate
+    load_ids = extracted_info.get("load_ids_discussed", [])
+    proposed_rate = extracted_info.get("proposed_rate")
+    
+    if not load_ids or not proposed_rate:
+        logger.info("No load IDs or proposed rate found - skipping negotiation")
+        return result
+    
+    # Get the first load ID mentioned
+    load_id = load_ids[0]
+    logger.info(f"🔍 Validating rate ${proposed_rate} against load {load_id}")
+    
+    # Find the load and its current rate
+    load = None
+    current_rate = None
+    
+    try:
+        if DATABASE_AVAILABLE:
+            conn = get_db_connection()
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("SELECT * FROM loads WHERE load_id = %s AND status = 'available'", (load_id,))
+            load = cursor.fetchone()
+            cursor.close()
+            conn.close()
+        else:
+            # Check mock data
+            for mock_load in MOCK_LOAD_DATA:
+                if mock_load["load_id"] == load_id:
+                    load = mock_load
+                    break
+        
+        if not load:
+            logger.warning(f"Load {load_id} not found - cannot validate rate")
+            return result
+        
+        result["load_found"] = True
+        current_rate = float(load.get('loadboard_rate', load.get('rate', 0)))
+        
+        if current_rate <= 0:
+            logger.warning(f"Load {load_id} has invalid rate: {current_rate}")
+            return result
+        
+        # Perform negotiation logic (same as /negotiate-rate endpoint)
+        proposed_rate = float(proposed_rate)
+        
+        if proposed_rate >= current_rate * 0.95:  # Accept if within 5%
+            status = "accepted"
+            counter_offer = proposed_rate
+            response_message = f"Great! We can accept ${proposed_rate:.2f} for load {load_id}."
+            final_outcome = "load_booked"
+        elif proposed_rate >= current_rate * 0.90:  # Counter-offer if within 10%
+            status = "counter_offered"
+            counter_offer = current_rate * 0.93  # Counter at 93% of original
+            response_message = f"We're close! How about ${counter_offer:.2f} for load {load_id}?"
+            final_outcome = "negotiation"
+        else:  # Reject if too low
+            status = "rejected"
+            counter_offer = current_rate * 0.90  # Best offer at 90%
+            response_message = f"Sorry, ${proposed_rate:.2f} is too low. Our best rate for load {load_id} is ${counter_offer:.2f}."
+            final_outcome = "not_interested"
+        
+        # Store negotiation result
+        negotiation_result = {
+            "load_id": load_id,
+            "original_rate": current_rate,
+            "proposed_rate": proposed_rate,
+            "counter_offer": counter_offer,
+            "status": status,
+            "response_message": response_message,
+            "final_outcome": final_outcome
+        }
+        
+        # Update the extracted info with negotiation results
+        extracted_info["final_outcome"] = final_outcome
+        extracted_info["negotiated_rate"] = counter_offer
+        extracted_info["negotiation_status"] = status
+        
+        # Log negotiation results
+        logger.info(f"💰 Rate negotiation: ${proposed_rate} vs ${current_rate} -> {status} (${counter_offer})")
+        
+        result.update({
+            "negotiation_performed": True,
+            "negotiation_result": negotiation_result,
+            "rates_validated": True
+        })
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error in rate validation: {e}")
+        return result
+
 # ── FastAPI webhook route ─────────────────────────────────────────────────────────────
+# @app.post("/webhooks/happyrobot/call-completed")
+# async def happyrobot_call_completed(
+#     request: Request,
+#     background_tasks: BackgroundTasks,
+#     db: AsyncSession = Depends(get_db),
+# ):
+#     """
+#     FIXED: Receives HappyRobot webhook payloads with better error handling and logging
+#     """
+#     try:
+#         payload = await request.json()
+#         logger.info("🎯 HappyRobot webhook received: call_id=%s", payload.get("call_id", "unknown"))
+
+#         # 1. Normalise transcript (string or list → string)
+#         transcript_raw = payload.get("transcript", payload.get("call_transcript", ""))
+#         if isinstance(transcript_raw, list):
+#             transcript_raw = " ".join(str(part) for part in transcript_raw)
+
+#         # 2. Build base dict with current timestamp
+#         call_info = {
+#             "happyrobot_call_id": payload.get(
+#                 "call_id", f"HR_{int(datetime.datetime.utcnow().timestamp())}"
+#             ),
+#             "call_transcript": transcript_raw,
+#             "call_duration": float(payload.get("duration", payload.get("call_duration", 0))),
+#             "call_status": payload.get("status", "completed"),
+#             # Placeholders — will be filled by NLP helpers
+#             "carrier_mc": None,
+#             "company_name": None,
+#             "equipment_type": None,
+#             "original_rate": None,
+#             "proposed_rate": None,
+#             "final_outcome": "inquiry_only",
+#             "sentiment": "neutral",
+#             "call_outcome": "inquiry_only",  # Add this for compatibility
+#             "created_at": datetime.datetime.utcnow()  # Add explicit timestamp
+#         }
+
+#         # 3. NLP extraction from transcript
+#         if call_info["call_transcript"]:
+#             info = enhanced_extract_carrier_info_from_text(call_info["call_transcript"])
+#             call_info.update({
+#                 "carrier_mc": info.get("mc_number"),
+#                 "company_name": info.get("company_name"),
+#                 "equipment_type": info.get("equipment_type"),
+#                 "original_rate": info.get("original_rate"),
+#                 "proposed_rate": info.get("proposed_rate"),
+#                 "final_outcome": info.get("final_outcome", "inquiry_only"),
+#                 "sentiment": enhanced_analyze_sentiment(call_info["call_transcript"]),
+#                 "call_outcome": info.get("final_outcome", "inquiry_only")  # Map to call_outcome
+#             })
+
+#         # 4. Store the webhook data  
+#         await store_webhook_call_data(call_info, db)
+
+#         # 5. Log successful processing
+#         logger.info("✅ Webhook processed successfully: %s -> %s (%s)", 
+#                    call_info["happyrobot_call_id"], 
+#                    call_info["final_outcome"],
+#                    call_info["sentiment"])
+
+#         # 6. API response
+#         return {
+#             "success": True,
+#             "message": "Call data processed successfully",
+#             "call_id": call_info["happyrobot_call_id"],
+#             "extracted_data": {
+#                 "mc_number": call_info["carrier_mc"],
+#                 "company_name": call_info["company_name"],
+#                 "equipment_type": call_info["equipment_type"],
+#                 "sentiment": call_info["sentiment"],
+#                 "outcome": call_info["final_outcome"],
+#             },
+#             "stored_in": "database" if DATABASE_AVAILABLE else "memory",
+#             "timestamp": datetime.datetime.utcnow().isoformat()
+#         }
+
+#     except Exception as e:
+#         logger.error("❌ Webhook processing error: %s", e)
+#         import traceback
+#         logger.error("Stack trace: %s", traceback.format_exc())
+        
+#         return {
+#             "success": False, 
+#             "error": str(e),
+#             "timestamp": datetime.datetime.utcnow().isoformat()
+#         }
+
 @app.post("/webhooks/happyrobot/call-completed")
 async def happyrobot_call_completed(
     request: Request,
@@ -1879,7 +2131,7 @@ async def happyrobot_call_completed(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    FIXED: Receives HappyRobot webhook payloads with better error handling and logging
+    FIXED: HappyRobot webhook with proper rate negotiation and validation
     """
     try:
         payload = await request.json()
@@ -1906,35 +2158,46 @@ async def happyrobot_call_completed(
             "proposed_rate": None,
             "final_outcome": "inquiry_only",
             "sentiment": "neutral",
-            "call_outcome": "inquiry_only",  # Add this for compatibility
-            "created_at": datetime.datetime.utcnow()  # Add explicit timestamp
+            "call_outcome": "inquiry_only",
+            "created_at": datetime.datetime.utcnow()
         }
 
         # 3. NLP extraction from transcript
+        extracted_info = {}
         if call_info["call_transcript"]:
-            info = enhanced_extract_carrier_info_from_text(call_info["call_transcript"])
+            extracted_info = enhanced_extract_carrier_info_from_text(call_info["call_transcript"])
             call_info.update({
-                "carrier_mc": info.get("mc_number"),
-                "company_name": info.get("company_name"),
-                "equipment_type": info.get("equipment_type"),
-                "original_rate": info.get("original_rate"),
-                "proposed_rate": info.get("proposed_rate"),
-                "final_outcome": info.get("final_outcome", "inquiry_only"),
+                "carrier_mc": extracted_info.get("mc_number"),
+                "company_name": extracted_info.get("company_name"),
+                "equipment_type": extracted_info.get("equipment_type"),
+                "original_rate": extracted_info.get("original_rate"),
+                "proposed_rate": extracted_info.get("proposed_rate"),
+                "final_outcome": extracted_info.get("final_outcome", "inquiry_only"),
                 "sentiment": enhanced_analyze_sentiment(call_info["call_transcript"]),
-                "call_outcome": info.get("final_outcome", "inquiry_only")  # Map to call_outcome
+                "call_outcome": extracted_info.get("final_outcome", "inquiry_only")
             })
 
-        # 4. Store the webhook data  
+        # 4. NEW: Perform rate validation and negotiation
+        negotiation_result = await validate_and_negotiate_rates(extracted_info, db)
+        
+        # Update call info with negotiation results
+        if negotiation_result["negotiation_performed"]:
+            neg_data = negotiation_result["negotiation_result"]
+            call_info.update({
+                "final_outcome": neg_data["final_outcome"],
+                "call_outcome": neg_data["final_outcome"],
+                "proposed_rate": neg_data["counter_offer"],  # Use negotiated rate
+                "original_rate": neg_data["original_rate"]
+            })
+            
+            logger.info("✅ Rate negotiation completed: %s -> %s", 
+                       neg_data["status"], neg_data["response_message"])
+
+        # 5. Store the webhook data  
         await store_webhook_call_data(call_info, db)
 
-        # 5. Log successful processing
-        logger.info("✅ Webhook processed successfully: %s -> %s (%s)", 
-                   call_info["happyrobot_call_id"], 
-                   call_info["final_outcome"],
-                   call_info["sentiment"])
-
-        # 6. API response
-        return {
+        # 6. Build response with negotiation info
+        response_data = {
             "success": True,
             "message": "Call data processed successfully",
             "call_id": call_info["happyrobot_call_id"],
@@ -1948,6 +2211,23 @@ async def happyrobot_call_completed(
             "stored_in": "database" if DATABASE_AVAILABLE else "memory",
             "timestamp": datetime.datetime.utcnow().isoformat()
         }
+
+        # 7. Add negotiation results to response
+        if negotiation_result["negotiation_performed"]:
+            response_data["rate_negotiation"] = negotiation_result["negotiation_result"]
+            response_data["message"] = negotiation_result["negotiation_result"]["response_message"]
+        else:
+            response_data["rate_negotiation"] = {
+                "status": "no_negotiation",
+                "reason": "No rates or load IDs detected in transcript"
+            }
+
+        logger.info("✅ Webhook processed: %s -> %s (%s)", 
+                   call_info["happyrobot_call_id"], 
+                   call_info["final_outcome"],
+                   call_info["sentiment"])
+
+        return response_data
 
     except Exception as e:
         logger.error("❌ Webhook processing error: %s", e)

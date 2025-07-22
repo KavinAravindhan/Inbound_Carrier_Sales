@@ -1,12 +1,10 @@
 #!/bin/bash
 
-# Enhanced Carrier Sales API Testing Guide with HappyRobot Webhook Integration
 # Tests all functionality including database, webhooks, and real-time dashboard
-# Updated for the latest webhook and database integration
 
-echo "🚛 ================================================="
-echo "🚛 ENHANCED CARRIER SALES API WITH HAPPYROBOT WEBHOOKS"
-echo "🚛 ================================================="
+echo "================================================="
+echo "ENHANCED CARRIER SALES API WITH HAPPYROBOT WEBHOOKS"
+echo "================================================="
 echo ""
 
 # Colors for output
@@ -31,35 +29,35 @@ elif [ "$1" = "deployed" ] || [ "$1" = "production" ]; then
     API_BASE_URL="$DEPLOYED_API"
     ENV_NAME="DEPLOYED"
 elif [ "$1" = "both" ]; then
-    echo "🔄 Testing both environments..."
+    echo "Testing both environments..."
     echo ""
     echo -e "${BLUE}========================================${NC}"
-    echo -e "${BLUE}🏠 TESTING LOCAL ENVIRONMENT FIRST${NC}"
+    echo -e "${BLUE}TESTING LOCAL ENVIRONMENT FIRST${NC}"
     echo -e "${BLUE}========================================${NC}"
     $0 local
     local_result=$?
     echo ""
     echo -e "${PURPLE}========================================${NC}"
-    echo -e "${PURPLE}☁️  TESTING DEPLOYED ENVIRONMENT NEXT${NC}"
+    echo -e "${PURPLE}TESTING DEPLOYED ENVIRONMENT NEXT${NC}"
     echo -e "${PURPLE}========================================${NC}"
     $0 deployed
     deployed_result=$?
     echo ""
-    echo "🏁 ================================="
-    echo "🏁 COMBINED RESULTS SUMMARY"
-    echo "🏁 ================================="
+    echo "================================="
+    echo "COMBINED RESULTS SUMMARY"
+    echo "================================="
     if [ $local_result -eq 0 ] && [ $deployed_result -eq 0 ]; then
-        echo -e "${GREEN}🎉 ALL TESTS PASSED ON BOTH ENVIRONMENTS!${NC}"
+        echo -e "${GREEN}ALL TESTS PASSED ON BOTH ENVIRONMENTS!${NC}"
         echo -e "${GREEN}✅ Local Development: PASSED${NC}"
         echo -e "${GREEN}✅ Production Deployment: PASSED${NC}"
         echo ""
-        echo -e "${BLUE}🚀 Ready for HappyRobot Integration!${NC}"
+        echo -e "${BLUE}Ready for HappyRobot Integration!${NC}"
         echo "   Your API is working perfectly in both environments"
         echo "   Database connection established"
         echo "   Webhook endpoints are functional"
         echo "   Real-time dashboard is working"
         echo ""
-        echo "🎯 HappyRobot Webhook URL:"
+        echo "   HappyRobot Webhook URL:"
         echo "   ${DEPLOYED_API}/webhooks/happyrobot/call-completed"
     else
         echo -e "${RED}❌ SOME TESTS FAILED${NC}"
@@ -74,7 +72,7 @@ elif [ "$1" = "both" ]; then
             echo -e "${GREEN}✅ Production Deployment: PASSED${NC}"
         fi
         echo ""
-        echo "🔧 Fix failing environment(s) before proceeding"
+        echo "Fix failing environment(s) before proceeding"
     fi
     exit $((local_result + deployed_result))
 else
@@ -94,9 +92,9 @@ else
     exit 1
 fi
 
-echo "📋 Testing Environment: $ENV_NAME"
-echo "🔗 API URL: $API_BASE_URL"
-echo "🔑 API Key: ${API_KEY:0:20}..."
+echo "Testing Environment: $ENV_NAME"
+echo "API URL: $API_BASE_URL"
+echo "API Key: ${API_KEY:0:20}..."
 echo ""
 
 # Enhanced test function with better error handling
@@ -107,7 +105,7 @@ test_endpoint() {
     local data="$4"
     local expected_status="${5:-200}"
     
-    echo -n "🧪 $name... "
+    echo -n "$name... "
     
     if [ "$method" = "GET" ]; then
         if [ "$ENV_NAME" = "LOCAL" ] && [[ "$endpoint" != *"dashboard"* ]] && [[ "$endpoint" != *"webhook"* ]]; then
@@ -167,9 +165,9 @@ test_endpoint() {
 TOTAL_TESTS=0
 PASSED_TESTS=0
 
-echo "🔍 ================================="
-echo "🔍 CORE API & DATABASE TESTS"
-echo "🔍 ================================="
+echo "================================="
+echo "CORE API & DATABASE TESTS"
+echo "================================="
 echo ""
 
 # Test 1: Health Check (Enhanced with Database)
@@ -185,9 +183,9 @@ if test_endpoint "Enhanced Root Endpoint" "GET" "/" ""; then
 fi
 
 echo ""
-echo "🎯 ================================="
-echo "🎯 WEBHOOK INTEGRATION TESTS"
-echo "🎯 ================================="
+echo "================================="
+echo "WEBHOOK INTEGRATION TESTS"
+echo "================================="
 echo ""
 
 # Test 3: Webhook Debug Info
@@ -209,9 +207,9 @@ if test_endpoint "HappyRobot Webhook Readiness" "GET" "/test-happyrobot" ""; the
 fi
 
 echo ""
-echo "📞 ================================="
-echo "📞 WEBHOOK CALL PROCESSING TESTS"
-echo "📞 ================================="
+echo "================================="
+echo "WEBHOOK CALL PROCESSING TESTS"
+echo "================================="
 echo ""
 
 # Test 6: Test Webhook Call 1 (ABC Transportation)
@@ -252,13 +250,13 @@ fi
 
 # Wait for webhook processing
 echo ""
-echo "⏳ Waiting 3 seconds for webhook processing..."
+echo "Waiting 3 seconds for webhook processing..."
 sleep 3
 echo ""
 
-echo "📊 ================================="
-echo "📊 REAL-TIME DASHBOARD TESTS"
-echo "📊 ================================="
+echo "================================="
+echo "REAL-TIME DASHBOARD TESTS"
+echo "================================="
 echo ""
 
 # Test 9: Dashboard Metrics (After Webhooks)
@@ -274,9 +272,9 @@ if test_endpoint "Dashboard Activity (After Webhooks)" "GET" "/dashboard/activit
 fi
 
 echo ""
-echo "🔧 ================================="
-echo "🔧 FMCSA API INTEGRATION TESTS"
-echo "🔧 ================================="
+echo "================================="
+echo "FMCSA API INTEGRATION TESTS"
+echo "================================="
 echo ""
 
 # Test 11: FMCSA API Test
@@ -286,9 +284,9 @@ if test_endpoint "FMCSA API Test (MC 123456)" "GET" "/test-fmcsa/123456" ""; the
 fi
 
 echo ""
-echo "🚛 ================================="
-echo "🚛 CARRIER VERIFICATION TESTS"
-echo "🚛 ================================="
+echo "================================="
+echo "CARRIER VERIFICATION TESTS"
+echo "================================="
 echo ""
 
 # Test 12: Carrier Verification (Valid MC)
@@ -304,9 +302,9 @@ if test_endpoint "Carrier Verification (Invalid MC)" "POST" "/verify-carrier" '{
 fi
 
 echo ""
-echo "📦 ================================="
-echo "📦 LOAD OPERATIONS TESTS"
-echo "📦 ================================="
+echo "================================="
+echo "LOAD OPERATIONS TESTS"
+echo "================================="
 echo ""
 
 # Test 14-16: Load operations
@@ -326,9 +324,9 @@ if test_endpoint "Load Search (Flatbed)" "POST" "/search-loads" '{"equipment_typ
 fi
 
 echo ""
-echo "💰 ================================="
-echo "💰 RATE NEGOTIATION TESTS"
-echo "💰 ================================="
+echo "================================="
+echo "RATE NEGOTIATION TESTS"
+echo "================================="
 echo ""
 
 # Test 17-19: Rate negotiation
@@ -348,9 +346,9 @@ if test_endpoint "Rate Negotiation (Low Rate - Reject)" "POST" "/negotiate-rate"
 fi
 
 echo ""
-echo "📞 ================================="
-echo "📞 CALL PROCESSING AI TESTS"
-echo "📞 ================================="
+echo "================================="
+echo "CALL PROCESSING AI TESTS"
+echo "================================="
 echo ""
 
 # Test 20: Call Data Extraction
@@ -380,9 +378,9 @@ if test_endpoint "Call Classification (Negotiation)" "POST" "/classify-call" "$n
 fi
 
 echo ""
-echo "🔄 ================================="
-echo "🔄 FINAL VERIFICATION TESTS"
-echo "🔄 ================================="
+echo "================================="
+echo "FINAL VERIFICATION TESTS"
+echo "================================="
 echo ""
 
 # Final verification after all webhooks
@@ -390,7 +388,7 @@ sleep 2
 
 # Test 24: Final Dashboard State
 TOTAL_TESTS=$((TOTAL_TESTS + 1))
-echo -n "🧪 Final Dashboard State Verification... "
+echo -n "Final Dashboard State Verification... "
 response=$(curl -s -H "Authorization: Bearer $API_KEY" "$API_BASE_URL/dashboard-metrics")
 
 if echo "$response" | grep -q '"success":true'; then
@@ -399,14 +397,14 @@ if echo "$response" | grep -q '"success":true'; then
     total_calls=$(echo "$response" | grep -o '"total_calls":[0-9]*' | cut -d':' -f2)
     conversion_rate=$(echo "$response" | grep -o '"conversion_rate":[0-9.]*' | cut -d':' -f2)
     
-    echo "   📊 Final Results:"
+    echo "   Final Results:"
     echo "   Data Source: ${data_source}"
     echo "   Total Calls: ${total_calls}"
     echo "   Conversion Rate: ${conversion_rate}%"
     
     # Check if webhooks were properly processed
     if [[ "$data_source" == *"webhook"* ]] && [ "${total_calls:-0}" -gt 0 ]; then
-        echo -e "${GREEN}   🎉 WEBHOOK INTEGRATION SUCCESSFUL!${NC}"
+        echo -e "${GREEN}   WEBHOOK INTEGRATION SUCCESSFUL!${NC}"
         PASSED_TESTS=$((PASSED_TESTS + 1))
     elif [ "$ENV_NAME" = "LOCAL" ]; then
         echo -e "${YELLOW}   ⚠️  Local environment using mock data (expected)${NC}"
@@ -421,13 +419,13 @@ else
 fi
 
 echo ""
-echo "📊 ================================="
-echo "📊 $ENV_NAME TEST RESULTS SUMMARY"
-echo "📊 ================================="
+echo "================================="
+echo "$ENV_NAME TEST RESULTS SUMMARY"
+echo "================================="
 echo ""
 
 if [ $PASSED_TESTS -eq $TOTAL_TESTS ]; then
-    echo -e "${GREEN}🎉 ALL TESTS PASSED! ($PASSED_TESTS/$TOTAL_TESTS)${NC}"
+    echo -e "${GREEN}ALL TESTS PASSED! ($PASSED_TESTS/$TOTAL_TESTS)${NC}"
     echo ""
     echo -e "${GREEN}✅ Your Enhanced Carrier Sales API is fully functional!${NC}"
     echo ""
@@ -439,18 +437,18 @@ if [ $PASSED_TESTS -eq $TOTAL_TESTS ]; then
         echo -e "   ${GREEN}✅ Call processing AI working${NC}"
         echo -e "   ${GREEN}✅ Dashboard metrics functional${NC}"
         echo ""
-        echo "🔄 Next Steps:"
+        echo "Next Steps:"
         echo "   1. Deploy to production: fly deploy"
         echo "   2. Test production: $0 deployed"
         echo "   3. Configure HappyRobot webhooks"
         echo ""
-        echo "📋 Local Resources:"
+        echo "Local Resources:"
         echo "   • API Docs: $API_BASE_URL/docs"
         echo "   • Health: $API_BASE_URL/health"
         echo "   • Dashboard: $API_BASE_URL/dashboard"
         
     else
-        echo "🎉 Production Deployment Success:"
+        echo "Production Deployment Success:"
         echo -e "   ${GREEN}✅ Database connection established${NC}"
         echo -e "   ${GREEN}✅ Webhook integration working${NC}"
         echo -e "   ${GREEN}✅ Real-time dashboard functional${NC}"
@@ -458,27 +456,27 @@ if [ $PASSED_TESTS -eq $TOTAL_TESTS ]; then
         echo -e "   ${GREEN}✅ Call processing AI operational${NC}"
         echo -e "   ${GREEN}✅ Rate negotiation system working${NC}"
         echo ""
-        echo "🔗 Production Resources:"
-        echo "   📋 API Documentation: $API_BASE_URL/docs"
-        echo "   🔍 Health Check: $API_BASE_URL/health"
-        echo "   📊 Live Dashboard: $API_BASE_URL/dashboard"
-        echo "   🎯 Webhook Debug: $API_BASE_URL/webhooks/debug"
+        echo "Production Resources:"
+        echo "   API Documentation: $API_BASE_URL/docs"
+        echo "   Health Check: $API_BASE_URL/health"
+        echo "   Live Dashboard: $API_BASE_URL/dashboard"
+        echo "   Webhook Debug: $API_BASE_URL/webhooks/debug"
         echo ""
-        echo -e "${CYAN}🤖 HappyRobot Integration Ready!${NC}"
+        echo -e "${CYAN}HappyRobot Integration Ready!${NC}"
         echo ""
-        echo "📞 Configure your HappyRobot campaign with:"
+        echo "Configure your HappyRobot campaign with:"
         echo "   Webhook URL: $API_BASE_URL/webhooks/happyrobot/call-completed"
         echo "   Method: POST"
         echo "   Auth Header: Authorization: Bearer $API_KEY"
         echo "   Content-Type: application/json"
         echo ""
-        echo "🧪 Test webhook endpoints:"
+        echo "Test webhook endpoints:"
         echo "   • Call Classification: $API_BASE_URL/classify-call"
         echo "   • Data Extraction: $API_BASE_URL/extract-call-data"
         echo "   • Rate Negotiation: $API_BASE_URL/negotiate-rate"
         echo "   • Carrier Verification: $API_BASE_URL/verify-carrier"
         echo ""
-        echo -e "${PURPLE}🚀 READY FOR LIVE HAPPYROBOT CALLS!${NC}"
+        echo -e "${PURPLE}READY FOR LIVE HAPPYROBOT CALLS!${NC}"
         echo "   Your API is production-ready with database persistence"
         echo "   Dashboard shows real-time webhook activity"
         echo "   All AI processing endpoints are functional"
@@ -491,7 +489,7 @@ else
     echo ""
     
     if [ "$ENV_NAME" = "LOCAL" ]; then
-        echo "💡 Local Development Troubleshooting:"
+        echo "Local Development Troubleshooting:"
         echo "   1. Start API: python main.py"
         echo "   2. Check dependencies: pip install -r requirements.txt"
         echo "   3. Verify .env file exists with API keys"
@@ -499,14 +497,14 @@ else
         echo "   5. Check logs for errors"
         
     else
-        echo "💡 Production Troubleshooting:"
+        echo "Production Troubleshooting:"
         echo "   1. Check deployment: fly status -a carrier-sales-kavin"
         echo "   2. View logs: fly logs -a carrier-sales-kavin"
         echo "   3. Check database: fly status -a carrier-sales-db"
         echo "   4. Verify secrets: fly secrets list -a carrier-sales-kavin"
         echo "   5. Test manually: curl $API_BASE_URL/health"
         echo ""
-        echo "🔧 Common fixes:"
+        echo "Common fixes:"
         echo "   - Database not running: fly machine start -a carrier-sales-db"
         echo "   - Tables missing: SSH into DB and run table creation script"
         echo "   - Webhook issues: Check fly logs for detailed error messages"
