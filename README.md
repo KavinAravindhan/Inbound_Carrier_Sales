@@ -4,6 +4,12 @@
 
 A comprehensive inbound carrier sales system built with FastAPI, MySQL, and real-time HappyRobot webhook integration. This solution handles carrier verification, load matching, rate negotiation, and provides a live analytics dashboard.
 
+A comprehensive inbound carrier sales system built with FastAPI, MySQL, and real-time HappyRobot webhook integration. This solution handles carrier verification, load matching, rate negotiation, and provides a live analytics dashboard.
+
+**Watch Demo Video:** [Demo Video](https://drive.google.com/file/d/1J1AlQ4S5avcpQg8WoJ87ecVX09ZyGVk-/view?usp=sharing)
+
+---
+
 ---
 
 ## Project Structure
