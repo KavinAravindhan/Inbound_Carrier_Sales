@@ -1778,9 +1778,97 @@ async def search_loads(request: LoadSearchRequest, api_key: str = Depends(verify
         logger.error(f"Load search error: {e}")
         raise HTTPException(status_code=500, detail="Load search failed")
 
+# @app.post("/negotiate-rate")
+# async def negotiate_rate(request: RateNegotiationRequest, api_key: str = Depends(verify_api_key)):
+#     """Handle rate negotiation for a specific load"""
+#     try:
+#         # Find load
+#         load = None
+        
+#         if not DATABASE_AVAILABLE:
+#             for mock_load in MOCK_LOAD_DATA:
+#                 if mock_load["load_id"] == request.load_id:
+#                     load = mock_load
+#                     break
+#         else:
+#             conn = get_db_connection()
+#             cursor = conn.cursor(dictionary=True)
+#             cursor.execute("SELECT * FROM loads WHERE load_id = %s", (request.load_id,))
+#             load = cursor.fetchone()
+#             cursor.close()
+#             conn.close()
+        
+#         if not load:
+#             raise HTTPException(status_code=404, detail="Load not found")
+        
+#         current_rate = float(load['loadboard_rate'])
+#         proposed_rate = request.proposed_rate
+        
+#         # Negotiation logic
+#         if proposed_rate >= current_rate * 0.95:
+#             status = "accepted"
+#             counter_offer = proposed_rate
+#             response_message = f"Great! We can accept ${proposed_rate:.2f} for load {request.load_id}."
+#         elif proposed_rate >= current_rate * 0.90:
+#             status = "counter_offered"
+#             counter_offer = current_rate * 0.93
+#             response_message = f"We're close! How about ${counter_offer:.2f} for load {request.load_id}?"
+#         else:
+#             status = "rejected"
+#             counter_offer = current_rate * 0.90
+#             response_message = f"Sorry, ${proposed_rate:.2f} is too low. Our best rate for load {request.load_id} is ${counter_offer:.2f}."
+        
+#         call_id = f"CALL_{request.load_id}_{int(datetime.datetime.now().timestamp())}"
+        
+#         # Record negotiation in database if available
+#         if DATABASE_AVAILABLE:
+#             try:
+#                 conn = get_db_connection()
+#                 cursor = conn.cursor()
+#                 cursor.execute("""
+#                     INSERT INTO negotiations (call_id, load_id, mc_number, proposed_rate, counter_offer, final_rate, status)
+#                     VALUES (%s, %s, %s, %s, %s, %s, %s)
+#                 """, (call_id, request.load_id, request.get_mc_number(), proposed_rate, counter_offer, counter_offer, status))
+#                 conn.commit()
+#                 cursor.close()
+#                 conn.close()
+#                 logger.info(f"Negotiation recorded in database")
+#             except Exception as db_error:
+#                 logger.warning(f"Could not record negotiation in database: {db_error}")
+        
+#         return {
+#             "success": True,
+#             "negotiation_result": {
+#                 "status": status,
+#                 "original_rate": current_rate,
+#                 "proposed_rate": proposed_rate,
+#                 "counter_offer": counter_offer,
+#                 "final_rate": counter_offer,
+#                 "response_message": response_message,
+#                 "call_id": call_id,
+#                 "mc_number": request.get_mc_number()
+#             }
+#         }
+        
+#     except Exception as e:
+#         logger.error(f"Rate negotiation error: {e}")
+#         raise HTTPException(status_code=500, detail=f"Rate negotiation failed: {str(e)}")
+
+# REPLACE your existing /negotiate-rate endpoint in main.py with this updated version:
+
+# RATE NEGOTIATION CONFIGURATION - Add this at the top of your file
+RATE_NEGOTIATION_CONFIG = {
+    "max_above_posted": 1000,      # Don't accept more than $1000 above posted rate
+    "max_below_posted": 1000,      # Don't accept more than $1000 below posted rate
+    "auto_accept_range": 100,      # Auto-accept within $100 of posted rate
+    "counter_offer_range": 500,    # Counter-offer if within $500 below posted
+    "counter_offer_discount": 200, # Counter-offer at $200 below posted rate
+    "final_offer_discount": 300    # Final offer at $300 below posted rate
+}
+
 @app.post("/negotiate-rate")
 async def negotiate_rate(request: RateNegotiationRequest, api_key: str = Depends(verify_api_key)):
-    """Handle rate negotiation for a specific load"""
+    """FIXED: Handle rate negotiation with strict dollar amount limits"""
     try:
         # Find load
         load = None
@@ -1804,21 +1892,38 @@ async def negotiate_rate(request: RateNegotiationRequest, api_key: str = Depends
         current_rate = float(load['loadboard_rate'])
         proposed_rate = request.proposed_rate
         
-        # Negotiation logic
-        if proposed_rate >= current_rate * 0.95:
+        # STRICT DOLLAR AMOUNT NEGOTIATION LOGIC
+        max_acceptable_rate = current_rate + RATE_NEGOTIATION_CONFIG["max_above_posted"]
+        min_acceptable_rate = current_rate - RATE_NEGOTIATION_CONFIG["max_below_posted"]
+        
+        logger.info(f"💰 Rate negotiation: Load {request.load_id}, Posted=${current_rate}, Proposed=${proposed_rate}, Range=${min_acceptable_rate}-${max_acceptable_rate}")
+        
+        # Check if proposed rate is completely outside acceptable range
+        if proposed_rate > max_acceptable_rate:
+            status = "rejected"
+            counter_offer = current_rate
+            response_message = f"Sorry, ${proposed_rate:.2f} is too high. Our posted rate for load {request.load_id} is ${current_rate:.2f}."
+        elif proposed_rate < min_acceptable_rate:
+            status = "rejected"
+            counter_offer = min_acceptable_rate
+            response_message = f"Sorry, ${proposed_rate:.2f} is too low. Our minimum rate for load {request.load_id} is ${min_acceptable_rate:.2f}."
+        elif abs(proposed_rate - current_rate) <= RATE_NEGOTIATION_CONFIG["auto_accept_range"]:
             status = "accepted"
             counter_offer = proposed_rate
-            response_message = f"Great! We can accept ${proposed_rate:.2f} for load {request.load_id}."
-        elif proposed_rate >= current_rate * 0.90:
+            response_message = f"Perfect! We can accept ${proposed_rate:.2f} for load {request.load_id}."
+        elif proposed_rate >= current_rate - RATE_NEGOTIATION_CONFIG["counter_offer_range"]:
             status = "counter_offered"
-            counter_offer = current_rate * 0.93
-            response_message = f"We're close! How about ${counter_offer:.2f} for load {request.load_id}?"
-        else:
+            counter_offer = current_rate - RATE_NEGOTIATION_CONFIG["counter_offer_discount"]
+            response_message = f"We're close! How about ${counter_offer:.2f} for load {request.load_id}? Our posted rate is ${current_rate:.2f}."
+        else:  # Between counter_offer_range and max_below_posted
             status = "rejected"
-            counter_offer = current_rate * 0.90
+            counter_offer = current_rate - RATE_NEGOTIATION_CONFIG["final_offer_discount"]
             response_message = f"Sorry, ${proposed_rate:.2f} is too low. Our best rate for load {request.load_id} is ${counter_offer:.2f}."
         
         call_id = f"CALL_{request.load_id}_{int(datetime.datetime.now().timestamp())}"
+        
+        # Log the negotiation decision
+        logger.info(f"🎯 Negotiation result: {status} - {response_message}")
         
         # Record negotiation in database if available
         if DATABASE_AVAILABLE:
@@ -1832,7 +1937,7 @@ async def negotiate_rate(request: RateNegotiationRequest, api_key: str = Depends
                 conn.commit()
                 cursor.close()
                 conn.close()
-                logger.info(f"Negotiation recorded in database")
+                logger.info(f"✅ Negotiation recorded in database")
             except Exception as db_error:
                 logger.warning(f"Could not record negotiation in database: {db_error}")
         
@@ -1846,13 +1951,73 @@ async def negotiate_rate(request: RateNegotiationRequest, api_key: str = Depends
                 "final_rate": counter_offer,
                 "response_message": response_message,
                 "call_id": call_id,
-                "mc_number": request.get_mc_number()
+                "mc_number": request.get_mc_number(),
+                "negotiation_config_used": RATE_NEGOTIATION_CONFIG
             }
         }
         
     except Exception as e:
         logger.error(f"Rate negotiation error: {e}")
         raise HTTPException(status_code=500, detail=f"Rate negotiation failed: {str(e)}")
+
+# ADD THESE TEST ENDPOINTS for debugging:
+
+@app.get("/test-rate-negotiation/{load_id}/{proposed_rate}")
+async def test_rate_negotiation(load_id: str, proposed_rate: float, api_key: str = Depends(verify_api_key)):
+    """Test endpoint to see how rate negotiation logic responds to different scenarios"""
+    try:
+        # Create test request
+        test_request = RateNegotiationRequest(
+            load_id=load_id,
+            proposed_rate=proposed_rate,
+            mc_number="TEST123"
+        )
+        
+        # Call the actual negotiate_rate function
+        result = await negotiate_rate(test_request, api_key)
+        
+        return {
+            "success": True,
+            "test_scenario": {
+                "load_id": load_id,
+                "proposed_rate": proposed_rate
+            },
+            "negotiation_config": RATE_NEGOTIATION_CONFIG,
+            "result": result,
+            "timestamp": datetime.datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "test_scenario": {
+                "load_id": load_id,
+                "proposed_rate": proposed_rate
+            }
+        }
+
+@app.get("/rate-negotiation-config")
+async def get_rate_negotiation_config(api_key: str = Depends(verify_api_key)):
+    """Get current rate negotiation configuration settings"""
+    return {
+        "success": True,
+        "config": RATE_NEGOTIATION_CONFIG,
+        "explanation": {
+            "max_above_posted": "Maximum amount above posted rate that will be accepted",
+            "max_below_posted": "Maximum amount below posted rate that will be considered",
+            "auto_accept_range": "Automatically accept rates within this range of posted rate",
+            "counter_offer_range": "Make counter-offer if proposed rate is within this range below posted",
+            "counter_offer_discount": "Amount below posted rate to counter-offer at",
+            "final_offer_discount": "Amount below posted rate for final rejected offer"
+        },
+        "examples": {
+            "posted_rate": 2500,
+            "auto_accept": f"${2500 - RATE_NEGOTIATION_CONFIG['auto_accept_range']} - ${2500 + RATE_NEGOTIATION_CONFIG['auto_accept_range']}",
+            "counter_offer": f"${2500 - RATE_NEGOTIATION_CONFIG['counter_offer_range']} - ${2500 - RATE_NEGOTIATION_CONFIG['auto_accept_range'] - 1}",
+            "reject": f"Below ${2500 - RATE_NEGOTIATION_CONFIG['counter_offer_range']} or above ${2500 + RATE_NEGOTIATION_CONFIG['max_above_posted']}"
+        }
+    }
 
 @app.post("/extract-call-data")
 async def extract_call_data(request: CallDataExtractionRequest, api_key: str = Depends(verify_api_key)):
