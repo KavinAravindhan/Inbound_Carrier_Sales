@@ -68,20 +68,20 @@ MYSQL_CONFIG = {
 
 # Warning logs
 if API_KEY == "secure-api-key-change-this-in-production":
-    logger.warning("⚠️  Using default API key! Change this in production!")
+    logger.warning("Using default API key! Change this in production!")
 
 if not FMCSA_API_KEY:
-    logger.warning("⚠️  No FMCSA API key provided! Using professional mock data only.")
+    logger.warning("No FMCSA API key provided! Using professional mock data only.")
 else:
-    logger.info(f"✅ FMCSA API key configured: {FMCSA_API_KEY[:10]}...")
+    logger.info(f"FMCSA API key configured: {FMCSA_API_KEY[:10]}...")
 
 if not HAPPYROBOT_API_KEY:
-    logger.warning("⚠️  No HappyRobot API key provided! Using mock data for dashboard.")
+    logger.warning("No HappyRobot API key provided! Using mock data for dashboard.")
 else:
-    logger.info(f"✅ HappyRobot API key configured: {HAPPYROBOT_API_KEY[:10]}...")
-    logger.info(f"✅ HappyRobot Base URL: {HAPPYROBOT_BASE_URL}")
+    logger.info(f"HappyRobot API key configured: {HAPPYROBOT_API_KEY[:10]}...")
+    logger.info(f"HappyRobot Base URL: {HAPPYROBOT_BASE_URL}")
 
-# ─── database setup ─────────────────────────────────────────────
+# Database setup
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     # Construct from individual components if not provided
@@ -137,7 +137,7 @@ def get_db_connection_with_retry(max_retries=3, delay=5):
             cursor.close()
             
             DATABASE_AVAILABLE = True
-            logger.info(f"✅ Database connection successful to {MYSQL_CONFIG['host']}")
+            logger.info(f"Database connection successful to {MYSQL_CONFIG['host']}")
             return connection
             
         except mysql.connector.Error as err:
@@ -149,7 +149,7 @@ def get_db_connection_with_retry(max_retries=3, delay=5):
                 logger.error(f"All {max_retries} database connection attempts failed")
                 DATABASE_AVAILABLE = False
                 if ENVIRONMENT == "production":
-                    logger.info("🚀 Production mode: Continuing with mock data")
+                    logger.info("Production mode: Continuing with mock data")
                 return None
     
     return None
@@ -163,7 +163,7 @@ def get_db_connection():
 async def initialize_database_async():
     """Initialize database using async SQLAlchemy"""
     try:
-        logger.info("🔄 Initializing database with async SQLAlchemy...")
+        logger.info("Initializing database with async SQLAlchemy...")
         
         async with AsyncSessionLocal() as session:
             # Create all tables
@@ -175,47 +175,44 @@ async def initialize_database_async():
             call_count = result.scalar()
             
             if call_count == 0:
-                logger.info("📊 No existing call data found")
+                logger.info("No existing call data found")
                 # Sample data can be inserted here if needed
                 
             await session.commit()
-            logger.info("✅ Async database initialization completed")
+            logger.info("Async database initialization completed")
             return True
             
     except Exception as e:
-        logger.error(f"❌ Async database initialization failed: {e}")
+        logger.error(f"Async database initialization failed: {e}")
         return False
 
 def initialize_database():
     """Enhanced database initialization with both sync and async approaches"""
     global DATABASE_AVAILABLE
     
-    # First, try async approach for SQLAlchemy tables
+    # Try async approach for SQLAlchemy tables
     try:
         # Run async initialization - handle event loop properly
         try:
             loop = asyncio.get_event_loop()
             if loop.is_running():
-                # We're in an async context, schedule it
                 asyncio.create_task(initialize_database_async())
             else:
-                # Run in new event loop
                 asyncio.run(initialize_database_async())
         except RuntimeError:
-            # If no event loop, create one
             asyncio.run(initialize_database_async())
         
         DATABASE_AVAILABLE = True
-        logger.info("✅ SQLAlchemy tables created successfully")
+        logger.info("SQLAlchemy tables created successfully")
         
     except Exception as async_error:
         logger.error(f"Async database init failed: {async_error}")
     
-    # Then, try sync approach for additional tables and sample data
+    # Try sync approach for additional tables and sample data
     try:
         conn = get_db_connection_with_retry()
         if not conn:
-            logger.info("📦 Running in mock data mode")
+            logger.info("Running in mock data mode")
             DATABASE_AVAILABLE = False
             return
             
@@ -283,7 +280,7 @@ def initialize_database():
         """)
         
         conn.commit()
-        logger.info("✅ Additional MySQL tables created successfully")
+        logger.info("Additional MySQL tables created successfully")
         
         # Insert sample loads if table is empty
         cursor.execute("SELECT COUNT(*) FROM loads")
@@ -304,15 +301,15 @@ def initialize_database():
             """, sample_loads)
             
             conn.commit()
-            logger.info("✅ Sample loads inserted successfully")
+            logger.info("Sample loads inserted successfully")
         
         cursor.close()
         conn.close()
         DATABASE_AVAILABLE = True
         
     except Exception as err:
-        logger.warning(f"⚠️  Sync database initialization failed: {err}")
-        logger.info("📦 Running in mock data mode")
+        logger.warning(f"Sync database initialization failed: {err}")
+        logger.info("Running in mock data mode")
         DATABASE_AVAILABLE = False
 
 # Enhanced data extraction functions
@@ -404,44 +401,6 @@ def extract_load_ids(text: str) -> List[str]:
                 load_ids.append(f"LD{match}")
     
     return list(set(load_ids))  # Remove duplicates
-
-# def extract_rates(text: str) -> Dict[str, Optional[float]]:
-#     """Extract rates from text"""
-#     if not text:
-#         return {"original_rate": None, "proposed_rate": None}
-    
-#     # Look for rate patterns
-#     rate_patterns = [
-#         r'\$(\d{1,2}[,.]?\d{3,4})',  # $2500, $2,500
-#         r'(\d{1,2}[,.]?\d{3,4})\s*(?:dollars?|bucks?)',
-#         r'rate\s*(?:of\s*)?(\d{1,2}[,.]?\d{3,4})',
-#         r'(\d{1,2}[,.]?\d{3,4})\s*(?:for|rate)'
-#     ]
-    
-#     rates = []
-#     for pattern in rate_patterns:
-#         matches = re.findall(pattern, text.lower())
-#         for match in matches:
-#             try:
-#                 # Clean the rate string and convert to float
-#                 clean_rate = match.replace(',', '')
-#                 rate = float(clean_rate)
-#                 if 500 <= rate <= 10000:  # Reasonable rate range
-#                     rates.append(rate)
-#             except ValueError:
-#                 continue
-    
-#     rates = list(set(rates))  # Remove duplicates
-#     rates.sort()
-    
-#     result = {"original_rate": None, "proposed_rate": None}
-#     if len(rates) >= 2:
-#         result["original_rate"] = rates[-1]  # Highest rate (usually original)
-#         result["proposed_rate"] = rates[-2]  # Second highest
-#     elif len(rates) == 1:
-#         result["proposed_rate"] = rates[0]
-    
-#     return result
 
 def extract_rates(text: str) -> Dict[str, Optional[float]]:
     """FIXED: Enhanced rate extraction from text with better patterns"""
@@ -606,7 +565,7 @@ def enhanced_analyze_sentiment(transcript: str) -> str:
     
     positive_indicators = [
         "interested", "good", "great", "excellent", "perfect", "sounds good", 
-        "yes", "fantastic", "awesome", "love it", "definitely", "absolutely"
+        "yes", "fantastic", "awesome", "love it", "definitely", "thank you"
     ]
     
     negative_indicators = [
@@ -694,181 +653,13 @@ async def store_call_data_in_database(call_data: Dict):
         cursor.close()
         conn.close()
         
-        logger.info("✅ Webhook call data stored in database for real-time metrics")
+        logger.info("Webhook call data stored in database for real-time metrics")
         
     except Exception as e:
         logger.error(f"Error storing webhook call data: {e}")
 
 # Global variables for in-memory webhook storage
 webhook_events: List[Dict] = []   # in-memory fallback store
-
-# async def get_real_time_metrics():
-#     """Get real-time metrics from webhook data stored in database - FIXED VERSION"""
-#     if not DATABASE_AVAILABLE:
-#         return await get_enhanced_fallback_metrics()
-    
-#     try:
-#         conn = get_db_connection()
-#         cursor = conn.cursor(dictionary=True)
-        
-#         # Get date ranges
-#         today = datetime.datetime.now().date()
-#         week_ago = today - timedelta(days=7)
-        
-#         # Count total webhook calls (both database and in-memory)
-#         cursor.execute("SELECT COUNT(*) as total FROM calls WHERE created_at >= %s", (week_ago,))
-#         db_calls = cursor.fetchone()['total']
-#         total_calls = db_calls + len(webhook_events)  # Include in-memory calls
-        
-#         # Recent calls (last 7 days)  
-#         cursor.execute("SELECT COUNT(*) as recent FROM calls WHERE DATE(created_at) >= %s", (week_ago,))
-#         db_recent = cursor.fetchone()['recent']
-#         recent_calls = db_recent + len([e for e in webhook_events if 'created_at' not in e or (datetime.datetime.now() - datetime.datetime.now()).days < 7])
-        
-#         # Conversion rate (booked calls)
-#         cursor.execute("SELECT COUNT(*) as booked FROM calls WHERE call_outcome = 'load_booked' AND created_at >= %s", (week_ago,))
-#         booked_calls = cursor.fetchone()['booked']
-#         # Add in-memory booked calls
-#         memory_booked = len([e for e in webhook_events if e.get('final_outcome') == 'transferred to sales'])
-#         total_booked = booked_calls + memory_booked
-        
-#         conversion_rate = (total_booked / total_calls * 100) if total_calls > 0 else 0
-        
-#         # Average negotiated rate from webhook data
-#         cursor.execute("SELECT AVG(proposed_rate) as avg_rate FROM calls WHERE proposed_rate > 0 AND created_at >= %s", (week_ago,))
-#         avg_rate_result = cursor.fetchone()
-#         avg_rate = avg_rate_result['avg_rate'] if avg_rate_result['avg_rate'] else 0
-        
-#         # Add in-memory rates
-#         memory_rates = [e.get('proposed_rate', 0) for e in webhook_events if e.get('proposed_rate', 0) > 0]
-#         if memory_rates:
-#             all_rates = ([avg_rate] if avg_rate else []) + memory_rates
-#             avg_rate = sum(all_rates) / len(all_rates)
-        
-#         if avg_rate == 0:
-#             avg_rate = 2650  # Default fallback
-        
-#         # Determine data source based on actual webhook activity
-#         data_source = "enhanced_mock_data"  # Default
-#         if total_calls > 0:
-#             if db_calls > 0:
-#                 data_source = "webhook_database_real_time"
-#             elif len(webhook_events) > 0:
-#                 data_source = "webhook_memory_real_time" 
-        
-#         # Build classifications from both sources
-#         cursor.execute("""
-#             SELECT call_outcome as type, COUNT(*) as count 
-#             FROM calls 
-#             WHERE call_outcome IS NOT NULL AND created_at >= %s 
-#             GROUP BY call_outcome
-#         """, (week_ago,))
-#         db_classifications = {row['type']: row['count'] for row in cursor.fetchall()}
-        
-#         # Add in-memory classifications
-#         memory_classifications = {}
-#         for event in webhook_events:
-#             outcome = event.get('final_outcome', 'inquiry_only')
-#             memory_classifications[outcome] = memory_classifications.get(outcome, 0) + 1
-        
-#         # Merge classifications
-#         all_classifications = {}
-#         for outcome in set(list(db_classifications.keys()) + list(memory_classifications.keys())):
-#             all_classifications[outcome] = db_classifications.get(outcome, 0) + memory_classifications.get(outcome, 0)
-        
-#         classifications = [{"type": k, "count": v} for k, v in all_classifications.items()]
-        
-#         if not classifications:
-#             classifications = [
-#                 {"type": "inquiry_only", "count": max(1, int(total_calls * 0.5))},
-#                 {"type": "negotiation", "count": max(1, int(total_calls * 0.3))},
-#                 {"type": "load_booked", "count": max(1, int(total_calls * 0.15))},
-#                 {"type": "not_interested", "count": max(0, int(total_calls * 0.05))}
-#             ]
-        
-#         # Build sentiments similarly
-#         cursor.execute("""
-#             SELECT sentiment as type, COUNT(*) as count 
-#             FROM calls 
-#             WHERE sentiment IS NOT NULL AND created_at >= %s 
-#             GROUP BY sentiment
-#         """, (week_ago,))
-#         db_sentiments = {row['type']: row['count'] for row in cursor.fetchall()}
-        
-#         memory_sentiments = {}
-#         for event in webhook_events:
-#             sentiment = event.get('sentiment', 'neutral')
-#             memory_sentiments[sentiment] = memory_sentiments.get(sentiment, 0) + 1
-        
-#         all_sentiments = {}
-#         for sentiment in set(list(db_sentiments.keys()) + list(memory_sentiments.keys())):
-#             all_sentiments[sentiment] = db_sentiments.get(sentiment, 0) + memory_sentiments.get(sentiment, 0)
-            
-#         sentiments = [{"type": k, "count": v} for k, v in all_sentiments.items()]
-        
-#         if not sentiments:
-#             sentiments = [
-#                 {"type": "positive", "count": max(1, int(total_calls * 0.6))},
-#                 {"type": "neutral", "count": max(1, int(total_calls * 0.3))},
-#                 {"type": "negative", "count": max(0, int(total_calls * 0.1))}
-#             ]
-        
-#         # Equipment performance
-#         cursor.execute("""
-#             SELECT equipment_type as type, COUNT(*) as calls 
-#             FROM calls 
-#             WHERE equipment_type IS NOT NULL AND created_at >= %s 
-#             GROUP BY equipment_type
-#         """, (week_ago,))
-#         db_equipment = {row['type']: row['calls'] for row in cursor.fetchall()}
-        
-#         memory_equipment = {}
-#         for event in webhook_events:
-#             equipment = event.get('equipment_type')
-#             if equipment:
-#                 memory_equipment[equipment] = memory_equipment.get(equipment, 0) + 1
-        
-#         all_equipment = {}
-#         for equip in set(list(db_equipment.keys()) + list(memory_equipment.keys())):
-#             all_equipment[equip] = db_equipment.get(equip, 0) + memory_equipment.get(equip, 0)
-            
-#         equipment_performance = [{"type": k, "calls": v} for k, v in all_equipment.items()]
-        
-#         if not equipment_performance:
-#             equipment_performance = [
-#                 {"type": "Dry Van", "calls": max(1, int(total_calls * 0.4))},
-#                 {"type": "Flatbed", "calls": max(1, int(total_calls * 0.3))},
-#                 {"type": "Refrigerated", "calls": max(1, int(total_calls * 0.2))},
-#                 {"type": "Step Deck", "calls": max(0, int(total_calls * 0.1))}
-#             ]
-        
-#         cursor.close()
-#         conn.close()
-        
-#         metrics = {
-#             "summary": {
-#                 "total_calls": total_calls,
-#                 "recent_calls": recent_calls,
-#                 "conversion_rate": round(conversion_rate, 1),
-#                 "average_negotiated_rate": int(avg_rate)
-#             },
-#             "classifications": classifications,
-#             "sentiments": sentiments,
-#             "equipment_performance": equipment_performance,
-#             "recent_activity": [],
-#             "updated_at": datetime.datetime.now(timezone.utc).isoformat(),
-#             "data_source": data_source
-#         }
-        
-#         return metrics
-        
-#     except Exception as e:
-#         logger.error(f"Error calculating real-time metrics: {e}")
-#         return await get_enhanced_fallback_metrics()
-
-# Replace your get_real_time_metrics function in main.py with this fixed version
-
-# EXACT REPLACEMENT: Find and replace your get_real_time_metrics() function with this
 
 async def get_real_time_metrics():
     """FIXED: Get real-time metrics - ONLY count webhook calls, not all database calls"""
@@ -906,7 +697,7 @@ async def get_real_time_metrics():
         # Total webhook calls = database + memory
         total_webhook_calls = db_webhook_count + memory_webhook_count
         
-        logger.info(f"📊 Webhook count: DB={db_webhook_count}, Memory={memory_webhook_count}, Total={total_webhook_calls}")
+        logger.info(f"Webhook count: DB={db_webhook_count}, Memory={memory_webhook_count}, Total={total_webhook_calls}")
         
         # If no webhook calls at all, return mock data
         if total_webhook_calls == 0:
@@ -1099,7 +890,7 @@ async def get_real_time_metrics():
             "data_source": data_source
         }
         
-        logger.info(f"✅ Webhook metrics: {total_webhook_calls} calls, source: {data_source}")
+        logger.info(f"Webhook metrics: {total_webhook_calls} calls, source: {data_source}")
         return metrics
         
     except Exception as e:
@@ -1201,7 +992,7 @@ async def get_enhanced_fallback_metrics():
     
     return metrics
 
-# Professional Mock Data (fallback)
+# Mock Data
 MOCK_CARRIER_DATA = {
     "123456": {
         "mc_number": "123456",
@@ -1297,7 +1088,7 @@ MOCK_LOAD_DATA = [
     }
 ]
 
-# FMCSA API Integration (unchanged)
+# FMCSA API Integration
 async def query_fmcsa_api(mc_number: str, api_key: str):
     """Query the real FMCSA API for carrier information"""
     if not api_key:
@@ -1356,7 +1147,7 @@ async def query_fmcsa_api(mc_number: str, api_key: str):
         logger.warning(f"FMCSA API query failed for MC {mc_number}: {e}")
         return None
 
-# Pydantic Models (unchanged)
+# Pydantic Models
 class LoadSearchRequest(BaseModel):
     equipment_type: str
     pickup_state: Optional[str] = None
@@ -1411,7 +1202,7 @@ class CallClassificationRequest(BaseModel):
 async def lifespan(app: FastAPI):
     """Application lifespan handler with proper async database initialization"""
     # Startup
-    logger.info("🚛 Starting Enhanced Carrier Sales API with HappyRobot Integration...")
+    logger.info("Starting Carrier Sales API with HappyRobot Integration...")
     
     # Initialize database
     initialize_database()
@@ -1422,14 +1213,14 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Async database init in lifespan failed: {e}")
     
-    logger.info("✅ Enhanced Carrier Sales API started successfully")
+    logger.info("Carrier Sales API started successfully")
     yield
     # Shutdown
-    logger.info("🛑 Shutting down Enhanced Carrier Sales API...")
+    logger.info("Shutting down Carrier Sales API...")
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="Enhanced Carrier Sales API with HappyRobot Integration",
+    title="Carrier Sales API with HappyRobot Integration",
     description="AI-powered freight broker assistant with real HappyRobot call data processing and FMCSA integration",
     version="1.3.0",
     docs_url="/docs",
@@ -1459,30 +1250,24 @@ def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(security)
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start_time = datetime.datetime.now()
-    logger.info(f"📥 {request.method} {request.url.path} from {request.client.host}")
+    logger.info(f"{request.method} {request.url.path} from {request.client.host}")
     response = await call_next(request)
     process_time = (datetime.datetime.now() - start_time).total_seconds()
-    logger.info(f"📤 {request.method} {request.url.path} -> {response.status_code} ({process_time:.3f}s)")
+    logger.info(f"{request.method} {request.url.path} -> {response.status_code} ({process_time:.3f}s)")
     return response
 
-# Global variables for in-memory webhook storage
-webhook_events: List[Dict] = []   # in-memory fallback store
-
-# ── helper functions ────────────────────────────────────────────────────────────────
 async def store_webhook_call_data(
     call_info: Dict,
     db: Optional[AsyncSession] = None,
 ) -> None:
-    """
-    FIXED: Persist a HappyRobot webhook record with better error handling
-    """
+
     global webhook_events
     
     try:
         if db is None or not DATABASE_AVAILABLE:
             # Store in memory as fallback
             webhook_events.append(call_info)
-            logger.info("📊 Stored webhook in-memory (%d total)", len(webhook_events))
+            logger.info("Stored webhook in-memory (%d total)", len(webhook_events))
             return
 
         # Try to store in database using SQLAlchemy async
@@ -1497,14 +1282,14 @@ async def store_webhook_call_data(
 
         await db.execute(stmt)
         await db.commit()
-        logger.info("✅ Stored webhook in MySQL: %s", call_info["happyrobot_call_id"])
+        logger.info("Stored webhook in MySQL: %s", call_info["happyrobot_call_id"])
         
         # Also add to memory for immediate dashboard updates
         webhook_events.append(call_info)
         
     except Exception as e:
         await db.rollback() if db else None
-        logger.error("❌ MySQL error, storing in memory only: %s", e)
+        logger.error("MySQL error, storing in memory only: %s", e)
         webhook_events.append(call_info)
 
 def get_in_memory_events(limit: int = 50) -> List[Dict]:
@@ -1595,13 +1380,11 @@ async def health_check():
 async def get_dashboard_metrics():
     """Get real-time dashboard metrics"""
     try:
-        logger.info("📊 Calculating real-time dashboard metrics...")
+        logger.info("Calculating real-time dashboard metrics...")
         
         # Get real metrics
         metrics = await get_real_time_metrics()
 
-        # If we're still in "no-DB" mode but we've seen webhooks,
-        # relabel the data source so the banner turns green.
         if not DATABASE_AVAILABLE and len(webhook_events) > 0:
             metrics["data_source"] = "webhook_memory_real_time"
             metrics["summary"]["total_calls"] = len(webhook_events)
@@ -1778,85 +1561,6 @@ async def search_loads(request: LoadSearchRequest, api_key: str = Depends(verify
         logger.error(f"Load search error: {e}")
         raise HTTPException(status_code=500, detail="Load search failed")
 
-# @app.post("/negotiate-rate")
-# async def negotiate_rate(request: RateNegotiationRequest, api_key: str = Depends(verify_api_key)):
-#     """Handle rate negotiation for a specific load"""
-#     try:
-#         # Find load
-#         load = None
-        
-#         if not DATABASE_AVAILABLE:
-#             for mock_load in MOCK_LOAD_DATA:
-#                 if mock_load["load_id"] == request.load_id:
-#                     load = mock_load
-#                     break
-#         else:
-#             conn = get_db_connection()
-#             cursor = conn.cursor(dictionary=True)
-#             cursor.execute("SELECT * FROM loads WHERE load_id = %s", (request.load_id,))
-#             load = cursor.fetchone()
-#             cursor.close()
-#             conn.close()
-        
-#         if not load:
-#             raise HTTPException(status_code=404, detail="Load not found")
-        
-#         current_rate = float(load['loadboard_rate'])
-#         proposed_rate = request.proposed_rate
-        
-#         # Negotiation logic
-#         if proposed_rate >= current_rate * 0.95:
-#             status = "accepted"
-#             counter_offer = proposed_rate
-#             response_message = f"Great! We can accept ${proposed_rate:.2f} for load {request.load_id}."
-#         elif proposed_rate >= current_rate * 0.90:
-#             status = "counter_offered"
-#             counter_offer = current_rate * 0.93
-#             response_message = f"We're close! How about ${counter_offer:.2f} for load {request.load_id}?"
-#         else:
-#             status = "rejected"
-#             counter_offer = current_rate * 0.90
-#             response_message = f"Sorry, ${proposed_rate:.2f} is too low. Our best rate for load {request.load_id} is ${counter_offer:.2f}."
-        
-#         call_id = f"CALL_{request.load_id}_{int(datetime.datetime.now().timestamp())}"
-        
-#         # Record negotiation in database if available
-#         if DATABASE_AVAILABLE:
-#             try:
-#                 conn = get_db_connection()
-#                 cursor = conn.cursor()
-#                 cursor.execute("""
-#                     INSERT INTO negotiations (call_id, load_id, mc_number, proposed_rate, counter_offer, final_rate, status)
-#                     VALUES (%s, %s, %s, %s, %s, %s, %s)
-#                 """, (call_id, request.load_id, request.get_mc_number(), proposed_rate, counter_offer, counter_offer, status))
-#                 conn.commit()
-#                 cursor.close()
-#                 conn.close()
-#                 logger.info(f"Negotiation recorded in database")
-#             except Exception as db_error:
-#                 logger.warning(f"Could not record negotiation in database: {db_error}")
-        
-#         return {
-#             "success": True,
-#             "negotiation_result": {
-#                 "status": status,
-#                 "original_rate": current_rate,
-#                 "proposed_rate": proposed_rate,
-#                 "counter_offer": counter_offer,
-#                 "final_rate": counter_offer,
-#                 "response_message": response_message,
-#                 "call_id": call_id,
-#                 "mc_number": request.get_mc_number()
-#             }
-#         }
-        
-#     except Exception as e:
-#         logger.error(f"Rate negotiation error: {e}")
-#         raise HTTPException(status_code=500, detail=f"Rate negotiation failed: {str(e)}")
-
-# REPLACE your existing /negotiate-rate endpoint in main.py with this updated version:
-
-# RATE NEGOTIATION CONFIGURATION - Add this at the top of your file
 RATE_NEGOTIATION_CONFIG = {
     "max_above_posted": 1000,      # Don't accept more than $1000 above posted rate
     "max_below_posted": 1000,      # Don't accept more than $1000 below posted rate
@@ -1892,7 +1596,6 @@ async def negotiate_rate(request: RateNegotiationRequest, api_key: str = Depends
         current_rate = float(load['loadboard_rate'])
         proposed_rate = request.proposed_rate
         
-        # STRICT DOLLAR AMOUNT NEGOTIATION LOGIC
         max_acceptable_rate = current_rate + RATE_NEGOTIATION_CONFIG["max_above_posted"]
         min_acceptable_rate = current_rate - RATE_NEGOTIATION_CONFIG["max_below_posted"]
         
@@ -1923,7 +1626,7 @@ async def negotiate_rate(request: RateNegotiationRequest, api_key: str = Depends
         call_id = f"CALL_{request.load_id}_{int(datetime.datetime.now().timestamp())}"
         
         # Log the negotiation decision
-        logger.info(f"🎯 Negotiation result: {status} - {response_message}")
+        logger.info(f"Negotiation result: {status} - {response_message}")
         
         # Record negotiation in database if available
         if DATABASE_AVAILABLE:
@@ -1937,7 +1640,7 @@ async def negotiate_rate(request: RateNegotiationRequest, api_key: str = Depends
                 conn.commit()
                 cursor.close()
                 conn.close()
-                logger.info(f"✅ Negotiation recorded in database")
+                logger.info(f"Negotiation recorded in database")
             except Exception as db_error:
                 logger.warning(f"Could not record negotiation in database: {db_error}")
         
@@ -1959,8 +1662,6 @@ async def negotiate_rate(request: RateNegotiationRequest, api_key: str = Depends
     except Exception as e:
         logger.error(f"Rate negotiation error: {e}")
         raise HTTPException(status_code=500, detail=f"Rate negotiation failed: {str(e)}")
-
-# ADD THESE TEST ENDPOINTS for debugging:
 
 @app.get("/test-rate-negotiation/{load_id}/{proposed_rate}")
 async def test_rate_negotiation(load_id: str, proposed_rate: float, api_key: str = Depends(verify_api_key)):
@@ -2055,7 +1756,7 @@ async def extract_call_data(request: CallDataExtractionRequest, api_key: str = D
             "final_outcome": extracted_info.get("final_outcome", "inquiry_only")
         }
         
-        logger.info(f"✅ Successfully extracted call data: MC={response_data['mc_number']}, Company={response_data['company_name']}")
+        logger.info(f"Successfully extracted call data: MC={response_data['mc_number']}, Company={response_data['company_name']}")
         
         return response_data
         
@@ -2067,7 +1768,7 @@ async def extract_call_data(request: CallDataExtractionRequest, api_key: str = D
 async def classify_call(request: CallClassificationRequest, api_key: str = Depends(verify_api_key)):
     """Classify call intent and outcome - Enhanced for HappyRobot"""
     try:
-        logger.info(f"🔍 Classifying call transcript: {len(request.call_transcript)} chars")
+        logger.info(f"Classifying call transcript: {len(request.call_transcript)} chars")
         
         # Get enhanced classification
         classification = enhanced_classify_call_outcome(request.call_transcript)
@@ -2089,7 +1790,7 @@ async def classify_call(request: CallClassificationRequest, api_key: str = Depen
             "response_reason": classification["response_reason"]
         }
         
-        logger.info(f"✅ Call classified as: {response_data['response_classification']}")
+        logger.info(f"Call classified as: {response_data['response_classification']}")
         
         return response_data
         
@@ -2118,7 +1819,7 @@ async def validate_and_negotiate_rates(extracted_info: Dict, db: Optional[AsyncS
     
     # Get the first load ID mentioned
     load_id = load_ids[0]
-    logger.info(f"🔍 Validating rate ${proposed_rate} against load {load_id}")
+    logger.info(f"Validating rate ${proposed_rate} against load {load_id}")
     
     # Find the load and its current rate
     load = None
@@ -2186,7 +1887,7 @@ async def validate_and_negotiate_rates(extracted_info: Dict, db: Optional[AsyncS
         extracted_info["negotiation_status"] = status
         
         # Log negotiation results
-        logger.info(f"💰 Rate negotiation: ${proposed_rate} vs ${current_rate} -> {status} (${counter_offer})")
+        logger.info(f"Rate negotiation: ${proposed_rate} vs ${current_rate} -> {status} (${counter_offer})")
         
         result.update({
             "negotiation_performed": True,
@@ -2200,114 +1901,22 @@ async def validate_and_negotiate_rates(extracted_info: Dict, db: Optional[AsyncS
         logger.error(f"Error in rate validation: {e}")
         return result
 
-# ── FastAPI webhook route ─────────────────────────────────────────────────────────────
-# @app.post("/webhooks/happyrobot/call-completed")
-# async def happyrobot_call_completed(
-#     request: Request,
-#     background_tasks: BackgroundTasks,
-#     db: AsyncSession = Depends(get_db),
-# ):
-#     """
-#     FIXED: Receives HappyRobot webhook payloads with better error handling and logging
-#     """
-#     try:
-#         payload = await request.json()
-#         logger.info("🎯 HappyRobot webhook received: call_id=%s", payload.get("call_id", "unknown"))
-
-#         # 1. Normalise transcript (string or list → string)
-#         transcript_raw = payload.get("transcript", payload.get("call_transcript", ""))
-#         if isinstance(transcript_raw, list):
-#             transcript_raw = " ".join(str(part) for part in transcript_raw)
-
-#         # 2. Build base dict with current timestamp
-#         call_info = {
-#             "happyrobot_call_id": payload.get(
-#                 "call_id", f"HR_{int(datetime.datetime.utcnow().timestamp())}"
-#             ),
-#             "call_transcript": transcript_raw,
-#             "call_duration": float(payload.get("duration", payload.get("call_duration", 0))),
-#             "call_status": payload.get("status", "completed"),
-#             # Placeholders — will be filled by NLP helpers
-#             "carrier_mc": None,
-#             "company_name": None,
-#             "equipment_type": None,
-#             "original_rate": None,
-#             "proposed_rate": None,
-#             "final_outcome": "inquiry_only",
-#             "sentiment": "neutral",
-#             "call_outcome": "inquiry_only",  # Add this for compatibility
-#             "created_at": datetime.datetime.utcnow()  # Add explicit timestamp
-#         }
-
-#         # 3. NLP extraction from transcript
-#         if call_info["call_transcript"]:
-#             info = enhanced_extract_carrier_info_from_text(call_info["call_transcript"])
-#             call_info.update({
-#                 "carrier_mc": info.get("mc_number"),
-#                 "company_name": info.get("company_name"),
-#                 "equipment_type": info.get("equipment_type"),
-#                 "original_rate": info.get("original_rate"),
-#                 "proposed_rate": info.get("proposed_rate"),
-#                 "final_outcome": info.get("final_outcome", "inquiry_only"),
-#                 "sentiment": enhanced_analyze_sentiment(call_info["call_transcript"]),
-#                 "call_outcome": info.get("final_outcome", "inquiry_only")  # Map to call_outcome
-#             })
-
-#         # 4. Store the webhook data  
-#         await store_webhook_call_data(call_info, db)
-
-#         # 5. Log successful processing
-#         logger.info("✅ Webhook processed successfully: %s -> %s (%s)", 
-#                    call_info["happyrobot_call_id"], 
-#                    call_info["final_outcome"],
-#                    call_info["sentiment"])
-
-#         # 6. API response
-#         return {
-#             "success": True,
-#             "message": "Call data processed successfully",
-#             "call_id": call_info["happyrobot_call_id"],
-#             "extracted_data": {
-#                 "mc_number": call_info["carrier_mc"],
-#                 "company_name": call_info["company_name"],
-#                 "equipment_type": call_info["equipment_type"],
-#                 "sentiment": call_info["sentiment"],
-#                 "outcome": call_info["final_outcome"],
-#             },
-#             "stored_in": "database" if DATABASE_AVAILABLE else "memory",
-#             "timestamp": datetime.datetime.utcnow().isoformat()
-#         }
-
-#     except Exception as e:
-#         logger.error("❌ Webhook processing error: %s", e)
-#         import traceback
-#         logger.error("Stack trace: %s", traceback.format_exc())
-        
-#         return {
-#             "success": False, 
-#             "error": str(e),
-#             "timestamp": datetime.datetime.utcnow().isoformat()
-#         }
-
 @app.post("/webhooks/happyrobot/call-completed")
 async def happyrobot_call_completed(
     request: Request,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    FIXED: HappyRobot webhook with proper rate negotiation and validation
-    """
     try:
         payload = await request.json()
         logger.info("🎯 HappyRobot webhook received: call_id=%s", payload.get("call_id", "unknown"))
 
-        # 1. Normalise transcript (string or list → string)
+        # Normalise transcript (string or list → string)
         transcript_raw = payload.get("transcript", payload.get("call_transcript", ""))
         if isinstance(transcript_raw, list):
             transcript_raw = " ".join(str(part) for part in transcript_raw)
 
-        # 2. Build base dict with current timestamp
+        # Build base dict with current timestamp
         call_info = {
             "happyrobot_call_id": payload.get(
                 "call_id", f"HR_{int(datetime.datetime.utcnow().timestamp())}"
@@ -2327,7 +1936,7 @@ async def happyrobot_call_completed(
             "created_at": datetime.datetime.utcnow()
         }
 
-        # 3. NLP extraction from transcript
+        # NLP extraction from transcript
         extracted_info = {}
         if call_info["call_transcript"]:
             extracted_info = enhanced_extract_carrier_info_from_text(call_info["call_transcript"])
@@ -2342,7 +1951,7 @@ async def happyrobot_call_completed(
                 "call_outcome": extracted_info.get("final_outcome", "inquiry_only")
             })
 
-        # 4. NEW: Perform rate validation and negotiation
+        # Perform rate validation and negotiation
         negotiation_result = await validate_and_negotiate_rates(extracted_info, db)
         
         # Update call info with negotiation results
@@ -2355,13 +1964,13 @@ async def happyrobot_call_completed(
                 "original_rate": neg_data["original_rate"]
             })
             
-            logger.info("✅ Rate negotiation completed: %s -> %s", 
+            logger.info("Rate negotiation completed: %s -> %s", 
                        neg_data["status"], neg_data["response_message"])
 
-        # 5. Store the webhook data  
+        # Store the webhook data  
         await store_webhook_call_data(call_info, db)
 
-        # 6. Build response with negotiation info
+        # Build response with negotiation info
         response_data = {
             "success": True,
             "message": "Call data processed successfully",
@@ -2377,7 +1986,7 @@ async def happyrobot_call_completed(
             "timestamp": datetime.datetime.utcnow().isoformat()
         }
 
-        # 7. Add negotiation results to response
+        # Add negotiation results to response
         if negotiation_result["negotiation_performed"]:
             response_data["rate_negotiation"] = negotiation_result["negotiation_result"]
             response_data["message"] = negotiation_result["negotiation_result"]["response_message"]
@@ -2387,7 +1996,7 @@ async def happyrobot_call_completed(
                 "reason": "No rates or load IDs detected in transcript"
             }
 
-        logger.info("✅ Webhook processed: %s -> %s (%s)", 
+        logger.info("Webhook processed: %s -> %s (%s)", 
                    call_info["happyrobot_call_id"], 
                    call_info["final_outcome"],
                    call_info["sentiment"])
@@ -2395,7 +2004,7 @@ async def happyrobot_call_completed(
         return response_data
 
     except Exception as e:
-        logger.error("❌ Webhook processing error: %s", e)
+        logger.error("Webhook processing error: %s", e)
         import traceback
         logger.error("Stack trace: %s", traceback.format_exc())
         
@@ -2405,12 +2014,12 @@ async def happyrobot_call_completed(
             "timestamp": datetime.datetime.utcnow().isoformat()
         }
 
-# Simplified HappyRobot integration test endpoint
+# HappyRobot integration test endpoint
 @app.get("/test-happyrobot")
 async def test_happyrobot_integration(api_key: str = Depends(verify_api_key)):
     """Test HappyRobot webhook readiness (no API calls needed)"""
     try:
-        logger.info("🧪 Testing HappyRobot webhook readiness...")
+        logger.info("Testing HappyRobot webhook readiness...")
         
         # Validate configuration
         config = validate_happyrobot_config()
@@ -2493,7 +2102,7 @@ async def test_fmcsa_api(mc_number: str, api_key: str = Depends(verify_api_key))
 async def webhook_debug_info():
     """Debug endpoint to show webhook configuration"""
     try:
-        # Use the correct API_BASE_URL logic from your existing code
+        # Use the correct API_BASE_URL logic
         api_base_url = "https://carrier-sales-kavin.fly.dev" if ENVIRONMENT == "production" else "http://localhost:8000"
         
         webhook_urls = {
@@ -2659,11 +2268,9 @@ def read_html_file(file_path: str) -> str:
         logger.error(f"Error reading HTML file: {e}")
         return f"<h1>Error loading dashboard</h1><p>{str(e)}</p>"
 
-# Replace the embedded HTML endpoint with this clean version:
 @app.get("/", response_class=HTMLResponse)
 async def get_dashboard():
     """Serve the HTML dashboard from index.html file"""
-    # html_content = read_html_file("index.html")
     html_content = read_html_file("dashboard/index.html")
     return HTMLResponse(content=html_content)
 

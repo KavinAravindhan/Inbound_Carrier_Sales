@@ -45,12 +45,12 @@ print_error() {
 }
 
 print_info() {
-    echo -e "${CYAN}ℹ️  $1${NC}"
+    echo -e "${CYAN} $1${NC}"
 }
 
 # Function to check prerequisites
 check_prerequisites() {
-    print_header "🔍 CHECKING PREREQUISITES"
+    print_header "CHECKING PREREQUISITES"
     
     local missing_tools=()
     
@@ -122,7 +122,7 @@ check_prerequisites() {
 
 # Function to set up environment
 setup_environment() {
-    print_header "🔧 ENVIRONMENT SETUP"
+    print_header "ENVIRONMENT SETUP"
     
     # Check if .env exists
     if [ ! -f ".env" ]; then
@@ -182,7 +182,7 @@ EOF
 
 # Function to set up Python environment
 setup_python_env() {
-    print_header "🐍 PYTHON ENVIRONMENT SETUP"
+    print_header "PYTHON ENVIRONMENT SETUP"
     
     # Check if virtual environment exists
     if [ ! -d ".venv_carrier_sales" ]; then
@@ -212,7 +212,7 @@ setup_python_env() {
 
 # Function to run local development
 run_local() {
-    print_header "🏠 LOCAL DEVELOPMENT SETUP"
+    print_header "LOCAL DEVELOPMENT SETUP"
     
     setup_python_env
     
@@ -239,7 +239,7 @@ run_local() {
 
 # Function to run with Docker
 run_docker() {
-    print_header "🐳 DOCKER SETUP"
+    print_header "DOCKER SETUP"
     
     if [ "$DOCKER_AVAILABLE" != true ]; then
         print_error "Docker is not installed!"
@@ -297,7 +297,7 @@ run_docker() {
 
 # Function to deploy to Fly.io
 deploy_production() {
-    print_header "☁️  PRODUCTION DEPLOYMENT TO FLY.IO"
+    print_header "PRODUCTION DEPLOYMENT TO FLY.IO"
     
     if [ "$FLY_AVAILABLE" != true ]; then
         print_error "Fly CLI is not installed!"
@@ -379,13 +379,13 @@ deploy_production() {
     if curl -f "$PROD_URL/health" >/dev/null 2>&1; then
         print_success "Production deployment successful!"
         echo ""
-        echo "🚀 Production URLs:"
+        echo "Production URLs:"
         echo "  • API: $PROD_URL"
         echo "  • Health: $PROD_URL/health"
         echo "  • Dashboard: $PROD_URL/dashboard"
         echo "  • API Docs: $PROD_URL/docs"
         echo ""
-        echo "🎯 HappyRobot Webhook URL:"
+        echo "HappyRobot Webhook URL:"
         echo "  $PROD_URL/webhooks/happyrobot/call-completed"
         echo ""
     else
@@ -399,7 +399,7 @@ deploy_production() {
 
 # Function to run tests
 run_tests() {
-    print_header "🧪 RUNNING TESTS"
+    print_header "RUNNING TESTS"
     
     local test_env="$1"
     

@@ -62,18 +62,18 @@ MYSQL_CONFIG = {
 
 # Warning logs
 if API_KEY == "secure-api-key-change-this-in-production":
-    logger.warning("⚠️  Using default API key! Change this in production!")
+    logger.warning("Using default API key! Change this in production!")
 
 if not FMCSA_API_KEY:
-    logger.warning("⚠️  No FMCSA API key provided! Using professional mock data only.")
+    logger.warning("[WARNING] No FMCSA API key provided! Using professional mock data only.")
 else:
-    logger.info(f"✅ FMCSA API key configured: {FMCSA_API_KEY[:10]}...")
+    logger.info(f"FMCSA API key configured: {FMCSA_API_KEY[:10]}...")
 
 if not HAPPYROBOT_API_KEY:
-    logger.warning("⚠️  No HappyRobot API key provided! Using mock data for dashboard.")
+    logger.warning("No HappyRobot API key provided! Using mock data for dashboard.")
 else:
-    logger.info(f"✅ HappyRobot API key configured: {HAPPYROBOT_API_KEY[:10]}...")
-    logger.info(f"✅ HappyRobot Base URL: {HAPPYROBOT_BASE_URL}")
+    logger.info(f"HappyRobot API key configured: {HAPPYROBOT_API_KEY[:10]}...")
+    logger.info(f"HappyRobot Base URL: {HAPPYROBOT_BASE_URL}")
 
 # Global variables for in-memory webhook storage (local development)
 webhook_events: List[Dict] = []
@@ -395,11 +395,11 @@ def get_db_connection():
         cursor.fetchone()
         cursor.close()
         DATABASE_AVAILABLE = True
-        logger.info(f"✅ Local database connection successful")
+        logger.info(f"Local database connection successful")
         return connection
     except mysql.connector.Error as err:
         logger.warning(f"Local database connection failed: {err}")
-        logger.info("📦 Running in mock data mode (this is normal for local development)")
+        logger.info("Running in mock data mode (this is normal for local development)")
         DATABASE_AVAILABLE = False
         return None
 
@@ -676,7 +676,7 @@ async def health_check():
 async def get_dashboard_metrics():
     """Get dashboard metrics for local development"""
     try:
-        logger.info("📊 Calculating local development metrics...")
+        logger.info("Calculating local development metrics...")
         metrics = await get_local_metrics()
         
         return {
@@ -853,7 +853,7 @@ async def extract_call_data(request: CallDataExtractionRequest, api_key: str = D
             "final_outcome": extracted_info.get("final_outcome", "inquiry_only")
         }
         
-        logger.info(f"✅ Successfully extracted call data: MC={response_data['mc_number']}, Company={response_data['company_name']}")
+        logger.info(f"Successfully extracted call data: MC={response_data['mc_number']}, Company={response_data['company_name']}")
         
         return response_data
         
@@ -865,7 +865,7 @@ async def extract_call_data(request: CallDataExtractionRequest, api_key: str = D
 async def classify_call(request: CallClassificationRequest, api_key: str = Depends(verify_api_key)):
     """Classify call intent and outcome"""
     try:
-        logger.info(f"🔍 Classifying call transcript: {len(request.call_transcript)} chars")
+        logger.info(f"Classifying call transcript: {len(request.call_transcript)} chars")
         
         # Get enhanced classification
         classification = enhanced_classify_call_outcome(request.call_transcript)
@@ -877,7 +877,7 @@ async def classify_call(request: CallClassificationRequest, api_key: str = Depen
             "response_reason": classification["response_reason"]
         }
         
-        logger.info(f"✅ Call classified as: {response_data['response_classification']}")
+        logger.info(f"Call classified as: {response_data['response_classification']}")
         
         return response_data
         
@@ -891,7 +891,7 @@ async def happyrobot_call_completed_local(request: Request):
     """LOCAL: Simulate HappyRobot webhook for development"""
     try:
         payload = await request.json()
-        logger.info("🎯 Local webhook simulation received")
+        logger.info("Local webhook simulation received")
 
         # Normalise transcript
         transcript_raw = payload.get("transcript", payload.get("call_transcript", ""))
@@ -932,7 +932,7 @@ async def happyrobot_call_completed_local(request: Request):
         # Store in memory for local development
         webhook_events.append(call_info)
         
-        logger.info(f"✅ Local webhook processed: {call_info['happyrobot_call_id']} -> {call_info['final_outcome']}")
+        logger.info(f"Local webhook processed: {call_info['happyrobot_call_id']} -> {call_info['final_outcome']}")
 
         return {
             "success": True,
@@ -950,7 +950,7 @@ async def happyrobot_call_completed_local(request: Request):
         }
 
     except Exception as e:
-        logger.error(f"❌ Local webhook processing error: {e}")
+        logger.error(f"Local webhook processing error: {e}")
         return {
             "success": False, 
             "error": str(e),
@@ -1038,14 +1038,14 @@ except Exception as e:
     logger.info("Local database initialization skipped (this is normal)")
 
 if __name__ == "__main__":
-    logger.info("🚛 Starting LOCAL DEVELOPMENT server...")
-    logger.info("📋 Local endpoints:")
+    logger.info("Starting LOCAL DEVELOPMENT server...")
+    logger.info("Local endpoints:")
     logger.info("   • API: http://localhost:8000")
     logger.info("   • Docs: http://localhost:8000/docs")
     logger.info("   • Health: http://localhost:8000/health")
     logger.info("   • Dashboard: http://localhost:8000/dashboard")
     logger.info("")
-    logger.info("🎯 Test webhook: curl -X POST http://localhost:8000/webhooks/happyrobot/call-completed")
+    logger.info("Test webhook: curl -X POST http://localhost:8000/webhooks/happyrobot/call-completed")
     logger.info("")
     
     uvicorn.run(
