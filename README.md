@@ -51,7 +51,7 @@ chmod +x setup.sh
 
 ### **Option 2: Manual Setup**
 
-Follow the detailed instructions in the [Manual Setup](https://github.com/KavinAravindhan/Inbound_Carrier_Sales/edit/main/README.md#manual-setup) section below.
+Follow the detailed instructions in the [Manual Setup](https://github.com/KavinAravindhan/Inbound_Carrier_Sales/tree/main?tab=readme-ov-file#manual-setup) section below.
 
 ---
 
